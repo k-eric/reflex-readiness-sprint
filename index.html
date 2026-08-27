@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reflex Delivery System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <!-- Header -->
+    <header class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border">
+      <h1 class="text-xl font-bold text-gray-800">REFLEX <span class="text-xs font-normal text-gray-500">| Delivery Control</span></h1>
+      <span class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold">System Active</span>
+    </header>
+
+    <!-- Role Switcher -->
+    <div class="flex gap-2 bg-white p-2 rounded-xl shadow-sm border">
+      <button onclick="showRole('retailer')" class="flex-1 py-2 font-semibold rounded-lg bg-blue-600 text-white" id="btn-retailer">1. Retailer</button>
+      <button onclick="showRole('dispatcher')" class="flex-1 py-2 font-semibold rounded-lg text-gray-600 hover:bg-gray-100" id="btn-dispatcher">2. Dispatcher</button>
+      <button onclick="showRole('rider')" class="flex-1 py-2 font-semibold rounded-lg text-gray-600 hover:bg-gray-100" id="btn-rider">3. Rider</button>
+    </div>
+
+    <!-- 1. Retailer View -->
+    <section id="view-retailer" class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
+      <h2 class="text-lg font-bold border-b pb-2">Log New Delivery</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <input type="text" id="custName" placeholder="Customer Name" class="border p-2 rounded">
+        <input type="text" id="custPhone" placeholder="Phone Number" class="border p-2 rounded">
+        <input type="text" id="area" placeholder="Area (e.g. Kasarani)" class="border p-2 rounded">
+        <input type="text" id="landmark" placeholder="Landmark (Landmark-first address)" class="border p-2 rounded">
+      </div>
+      <input type="text" id="item" placeholder="Item Description (e.g. Samsung TV)" class="w-full border p-2 rounded">
+      <button onclick="submitOrder()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Submit Delivery Request</button>
+    </section>
+
+    <!-- 2. Dispatcher View (Hidden by default) -->
+    <section id="view-dispatcher" class="hidden bg-white p-6 rounded-xl shadow-sm border space-y-4">
+      <h2 class="text-lg font-bold border-b pb-2">Dispatcher Control Board</h2>
+      <p class="text-gray-500 text-sm">Assign pending orders to active riders.</p>
+    </section>
+
+    <!-- 3. Rider View (Hidden by default) -->
+    <section id="view-rider" class="hidden bg-white p-6 rounded-xl shadow-sm border space-y-4">
+      <h2 class="text-lg font-bold border-b pb-2">Rider Handoff Screen</h2>
+      <p class="text-gray-500 text-sm">Update job progress & scan QR/PIN verification code.</p>
+    </section>
+  </div>
+
+  <script>
+    // Paste your deployed Google Web App URL between the quotes below:
+    const API_URL = "https://script.google.com/macros/s/AKfycbw3eDCe9bO3uHk0dx8KM_0jASQOBFcL98_Xnq9vjRCoUtcRj8gZFtuxWQXkhrERtsre/exec";
+
+    function showRole(role) {
+      document.getElementById('view-retailer').classList.add('hidden');
+      document.getElementById('view-dispatcher').classList.add('hidden');
+      document.getElementById('view-rider').classList.add('hidden');
+      document.getElementById('view-' + role).classList.remove('hidden');
+    }
+
+    async function submitOrder() {
+      const payload = {
+        action: 'CREATE_ORDER',
+        customerName: document.getElementById('custName').value,
+        phone: document.getElementById('custPhone').value,
+        area: document.getElementById('area').value,
+        landmark: document.getElementById('landmark').value,
+        item: document.getElementById('item').value
+      };
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Order Created: ' + data.orderId);
+        }
+      } catch (err) {
+        console.error('API Error:', err);
+      }
+    }
+  </script>
+</body>
+</html>
