@@ -11,7 +11,7 @@
     <!-- Header -->
     <header class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border">
       <h1 class="text-xl font-bold text-gray-800">REFLEX <span class="text-xs font-normal text-gray-500">| Delivery Control</span></h1>
-      <span class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold">System Active</span>
+      <span id="sync-status" class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold">Online & Synced</span>
     </header>
 
     <!-- Role Switcher -->
@@ -34,70 +34,54 @@
       <button onclick="submitOrder()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Submit Delivery Request</button>
     </section>
 
-    <!-- 2. Dispatcher View (Hidden by default) -->
+    <!-- 2. Dispatcher View -->
     <section id="view-dispatcher" class="hidden bg-white p-6 rounded-xl shadow-sm border space-y-4">
       <h2 class="text-lg font-bold border-b pb-2">Dispatcher Control Board</h2>
-      <p class="text-gray-500 text-sm">Assign pending orders to active riders.</p>
+      <p class="text-gray-500 text-sm">Active Orders in Pipeline:</p>
+      <div id="dispatcher-orders-list" class="space-y-3">
+        <p class="text-gray-400 italic">Loading orders...</p>
+      </div>
     </section>
 
-    <!-- 3. Rider View (Hidden by default) -->
+    <!-- 3. Rider View -->
     <section id="view-rider" class="hidden bg-white p-6 rounded-xl shadow-sm border space-y-4">
-      <h2 class="text-lg font-bold border-b pb-2">Rider Handoff Screen</h2>
-      <p class="text-gray-500 text-sm">Update job progress & scan QR/PIN verification code.</p>
+      <h2 class="text-lg font-bold border-b pb-2">Rider Handoff & Verification</h2>
+      <div id="rider-orders-list" class="space-y-3">
+        <p class="text-gray-400 italic">Loading active assignments...</p>
+      </div>
     </section>
   </div>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbw3eDCe9bO3uHk0dx8KM_0jASQOBFcL98_Xnq9vjRCoUtcRj8gZFtuxWQXkhrERtsre/exec";
+    let liveOrders = [];
 
     function showRole(role) {
       document.getElementById('view-retailer').classList.add('hidden');
       document.getElementById('view-dispatcher').classList.add('hidden');
       document.getElementById('view-rider').classList.add('hidden');
       document.getElementById('view-' + role).classList.remove('hidden');
+      if (role === 'dispatcher' || role === 'rider') fetchOrders();
     }
 
     // --- DAY 3: OFFLINE QUEUE RESILIENCE ---
-    function getQueue() {
-      return JSON.parse(localStorage.getItem('reflex_offline_queue') || '[]');
-    }
-
-    function saveQueue(queue) {
-      localStorage.setItem('reflex_offline_queue', JSON.stringify(queue));
-    }
+    function getQueue() { return JSON.parse(localStorage.getItem('reflex_offline_queue') || '[]'); }
+    function saveQueue(q) { localStorage.setItem('reflex_offline_queue', JSON.stringify(q)); }
 
     async function processQueue() {
       if (!navigator.onLine) return;
       const queue = getQueue();
       if (queue.length === 0) return;
-
-      console.log(`Syncing ${queue.length} offline item(s)...`);
       const remainingQueue = [];
-
       for (const item of queue) {
         try {
-          const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify(item)
-          });
+          const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(item) });
           const data = await res.json();
-          if (data.success) {
-            console.log('Synced offline order:', data.orderId);
-          } else {
-            remainingQueue.push(item);
-          }
-        } catch (err) {
-          remainingQueue.push(item);
-        }
+          if (!data.success) remainingQueue.push(item);
+        } catch (err) { remainingQueue.push(item); }
       }
-
       saveQueue(remainingQueue);
-      if (remainingQueue.length === 0) {
-        alert('All offline orders successfully synced to Google Sheets!');
-      }
     }
-
-    // Auto-sync when coming back online
     window.addEventListener('online', processQueue);
 
     async function submitOrder() {
@@ -110,36 +94,107 @@
         item: document.getElementById('item').value
       };
 
-      // Check if online
       if (!navigator.onLine) {
         const queue = getQueue();
         queue.push(payload);
         saveQueue(queue);
-        alert('You are offline! Order saved locally. It will automatically sync when connection returns.');
+        alert('Offline! Saved to queue. Auto-sync will process when online.');
         return;
       }
 
-      // If online, try sending directly
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
         const data = await res.json();
-        if (data.success) {
-          alert('Order Created: ' + data.orderId);
-        }
+        if (data.success) alert('Order Created: ' + data.orderId + '\nVerification PIN: ' + data.pin);
       } catch (err) {
-        // Fallback to offline queue if request fails
         const queue = getQueue();
         queue.push(payload);
         saveQueue(queue);
-        alert('Network request failed. Saved to offline queue for auto-sync.');
+        alert('Network request failed. Saved to offline queue.');
       }
     }
 
-    // Try processing any leftover queue on load
-    window.addEventListener('DOMContentLoaded', processQueue);
+    // --- SHORT-POLLING STATE SYNCING ---
+    async function fetchOrders() {
+      if (!navigator.onLine) return;
+      try {
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'GET_ORDERS' }) });
+        const data = await res.json();
+        if (data.success) {
+          liveOrders = data.orders;
+          renderDispatcherUI();
+          renderRiderUI();
+        }
+      } catch (e) { console.error("Poll failed:", e); }
+    }
+
+    // Poll every 5 seconds
+    setInterval(fetchOrders, 5000);
+
+    function renderDispatcherUI() {
+      const container = document.getElementById('dispatcher-orders-list');
+      if (liveOrders.length === 0) { container.innerHTML = '<p class="text-gray-400">No orders found.</p>'; return; }
+      
+      container.innerHTML = liveOrders.map(o => `
+        <div class="border p-3 rounded flex justify-between items-center bg-gray-50">
+          <div>
+            <p class="font-bold">${o.orderId} - ${o.item} <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">${o.status}</span></p>
+            <p class="text-sm text-gray-600">${o.customerName} (${o.phone}) | ${o.landmark}, ${o.area}</p>
+          </div>
+          ${o.status === 'LOGGED' ? `
+            <button onclick="updateStatus('${o.orderId}', 'ASSIGNED', 'Rider-1')" class="bg-indigo-600 text-white text-xs px-3 py-2 rounded hover:bg-indigo-700">
+              Assign Rider 1
+            </button>
+          ` : `<span class="text-xs text-gray-500">Rider: ${o.riderId}</span>`}
+        </div>
+      `).join('');
+    }
+
+    function renderRiderUI() {
+      const container = document.getElementById('rider-orders-list');
+      const riderJobs = liveOrders.filter(o => o.status === 'ASSIGNED' || o.status === 'PICKED UP');
+      if (riderJobs.length === 0) { container.innerHTML = '<p class="text-gray-400">No active delivery assignments.</p>'; return; }
+
+      container.innerHTML = riderJobs.map(o => `
+        <div class="border p-3 rounded space-y-2 bg-gray-50">
+          <p class="font-bold">${o.orderId} - ${o.item} <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">${o.status}</span></p>
+          <p class="text-sm text-gray-600">Deliver to: ${o.customerName} | ${o.landmark}</p>
+          <div class="flex gap-2">
+            ${o.status === 'ASSIGNED' ? `
+              <button onclick="updateStatus('${o.orderId}', 'PICKED UP')" class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded">Mark Picked Up</button>
+            ` : `
+              <input type="text" id="pin-${o.orderId}" placeholder="Enter 4-Digit PIN" class="border p-1 text-xs rounded w-32">
+              <button onclick="verifyAndDeliver('${o.orderId}')" class="bg-green-600 text-white text-xs px-3 py-1.5 rounded">Verify PIN & Complete</button>
+            `}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function updateStatus(orderId, newStatus, riderId = '') {
+      await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'UPDATE_STATUS', orderId: orderId, newStatus: newStatus, riderId: riderId })
+      });
+      fetchOrders();
+    }
+
+    async function verifyAndDeliver(orderId) {
+      const pin = document.getElementById(`pin-${orderId}`).value;
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'UPDATE_STATUS', orderId: orderId, newStatus: 'DELIVERED', pin: pin })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Order ' + orderId + ' Delivered successfully!');
+        fetchOrders();
+      } else {
+        alert('Invalid PIN! Handoff verification failed.');
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => { processQueue(); fetchOrders(); });
   </script>
 </body>
 </html>
