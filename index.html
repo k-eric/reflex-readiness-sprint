@@ -48,7 +48,6 @@
   </div>
 
   <script>
-    // Paste your deployed Google Web App URL between the quotes below:
     const API_URL = "https://script.google.com/macros/s/AKfycbw3eDCe9bO3uHk0dx8KM_0jASQOBFcL98_Xnq9vjRCoUtcRj8gZFtuxWQXkhrERtsre/exec";
 
     function showRole(role) {
@@ -57,6 +56,49 @@
       document.getElementById('view-rider').classList.add('hidden');
       document.getElementById('view-' + role).classList.remove('hidden');
     }
+
+    // --- DAY 3: OFFLINE QUEUE RESILIENCE ---
+    function getQueue() {
+      return JSON.parse(localStorage.getItem('reflex_offline_queue') || '[]');
+    }
+
+    function saveQueue(queue) {
+      localStorage.setItem('reflex_offline_queue', JSON.stringify(queue));
+    }
+
+    async function processQueue() {
+      if (!navigator.onLine) return;
+      const queue = getQueue();
+      if (queue.length === 0) return;
+
+      console.log(`Syncing ${queue.length} offline item(s)...`);
+      const remainingQueue = [];
+
+      for (const item of queue) {
+        try {
+          const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(item)
+          });
+          const data = await res.json();
+          if (data.success) {
+            console.log('Synced offline order:', data.orderId);
+          } else {
+            remainingQueue.push(item);
+          }
+        } catch (err) {
+          remainingQueue.push(item);
+        }
+      }
+
+      saveQueue(remainingQueue);
+      if (remainingQueue.length === 0) {
+        alert('All offline orders successfully synced to Google Sheets!');
+      }
+    }
+
+    // Auto-sync when coming back online
+    window.addEventListener('online', processQueue);
 
     async function submitOrder() {
       const payload = {
@@ -68,6 +110,16 @@
         item: document.getElementById('item').value
       };
 
+      // Check if online
+      if (!navigator.onLine) {
+        const queue = getQueue();
+        queue.push(payload);
+        saveQueue(queue);
+        alert('You are offline! Order saved locally. It will automatically sync when connection returns.');
+        return;
+      }
+
+      // If online, try sending directly
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
@@ -78,9 +130,16 @@
           alert('Order Created: ' + data.orderId);
         }
       } catch (err) {
-        console.error('API Error:', err);
+        // Fallback to offline queue if request fails
+        const queue = getQueue();
+        queue.push(payload);
+        saveQueue(queue);
+        alert('Network request failed. Saved to offline queue for auto-sync.');
       }
     }
+
+    // Try processing any leftover queue on load
+    window.addEventListener('DOMContentLoaded', processQueue);
   </script>
 </body>
 </html>
