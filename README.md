@@ -1,3 +1,11 @@
+ ## Executive Summary & System Brief
+Reflex is a real-time readiness and dispatch telemetry prototype engineered to streamline localized delivery handoffs. Designed specifically for landmark-first address logging and low-latency state tracking, the system ensures seamless coordination between dispatchers and riders through automated short-polling and event auditing.
+
+### Key Business Objectives
+* **Rapid Handoff Verification:** Secure delivery state transitions via 4-digit PIN verification.
+* **Localized Address Handling:** Landmark-first data capture optimized for unnumbered or informal routing contexts.
+* **Real-time State Telemetry:** Automated short-polling loops (5-second intervals) to maintain synchronized state between dispatcher and rider interfaces without heavy infrastructure overhead.
+  
 # REFLEX | Logistics & Delivery Control System
 
 **REFLEX** is a lightweight, offline-resilient delivery and logistics management platform engineered for micro-retailers, dispatchers, and field delivery riders.
