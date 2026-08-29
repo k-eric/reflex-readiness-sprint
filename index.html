@@ -55,12 +55,21 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbw3eDCe9bO3uHk0dx8KM_0jASQOBFcL98_Xnq9vjRCoUtcRj8gZFtuxWQXkhrERtsre/exec";
     let liveOrders = [];
+    let currentRole = 'retailer';
 
     function showRole(role) {
+      currentRole = role;
       document.getElementById('view-retailer').classList.add('hidden');
       document.getElementById('view-dispatcher').classList.add('hidden');
       document.getElementById('view-rider').classList.add('hidden');
+      
+      document.getElementById('btn-retailer').className = 'flex-1 py-2 font-semibold rounded-lg text-gray-600 hover:bg-gray-100';
+      document.getElementById('btn-dispatcher').className = 'flex-1 py-2 font-semibold rounded-lg text-gray-600 hover:bg-gray-100';
+      document.getElementById('btn-rider').className = 'flex-1 py-2 font-semibold rounded-lg text-gray-600 hover:bg-gray-100';
+
       document.getElementById('view-' + role).classList.remove('hidden');
+      document.getElementById('btn-' + role).className = 'flex-1 py-2 font-semibold rounded-lg bg-blue-600 text-white';
+
       if (role === 'dispatcher' || role === 'rider') fetchOrders();
     }
 
@@ -105,7 +114,15 @@
       try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
         const data = await res.json();
-        if (data.success) alert('Order Created: ' + data.orderId + '\nVerification PIN: ' + data.pin);
+        if (data.success) {
+          alert('Order Created: ' + data.orderId + '\nVerification PIN: ' + data.pin);
+          // Clear inputs
+          document.getElementById('custName').value = '';
+          document.getElementById('custPhone').value = '';
+          document.getElementById('area').value = '';
+          document.getElementById('landmark').value = '';
+          document.getElementById('item').value = '';
+        }
       } catch (err) {
         const queue = getQueue();
         queue.push(payload);
@@ -114,18 +131,22 @@
       }
     }
 
-    // --- SHORT-POLLING STATE SYNCING ---
+    // FETCH ORDERS VIA GET & RENDER UI
     async function fetchOrders() {
-      if (!navigator.onLine) return;
       try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'GET_ORDERS' }) });
-        const data = await res.json();
+        const response = await fetch(API_URL);
+        const data = await response.json();
+        
         if (data.success) {
-          liveOrders = data.orders;
+          liveOrders = data.orders || [];
           renderDispatcherUI();
           renderRiderUI();
+        } else {
+          console.error('API Error:', data.error);
         }
-      } catch (e) { console.error("Poll failed:", e); }
+      } catch (err) {
+        console.error('Poll failed:', err);
+      }
     }
 
     // Poll every 5 seconds
@@ -145,7 +166,7 @@
             <button onclick="updateStatus('${o.orderId}', 'ASSIGNED', 'Rider-1')" class="bg-indigo-600 text-white text-xs px-3 py-2 rounded hover:bg-indigo-700">
               Assign Rider 1
             </button>
-          ` : `<span class="text-xs text-gray-500">Rider: ${o.riderId}</span>`}
+          ` : `<span class="text-xs text-gray-500 font-semibold">Rider: ${o.riderId}</span>`}
         </div>
       `).join('');
     }
@@ -171,26 +192,47 @@
       `).join('');
     }
 
-    async function updateStatus(orderId, newStatus, riderId = '') {
-      await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'UPDATE_STATUS', orderId: orderId, newStatus: newStatus, riderId: riderId })
-      });
-      fetchOrders();
+    async function updateStatus(orderId, newStatus, riderId = null) {
+      const payload = {
+        action: 'UPDATE_STATUS',
+        orderId: orderId,
+        newStatus: newStatus,
+        riderId: riderId,
+        actorRole: currentRole
+      };
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload) 
+        });
+        const data = await res.json();
+        if (data.success) {
+          fetchOrders(); // Refresh UI immediately
+        } else {
+          alert('Update failed: ' + data.message);
+        }
+      } catch (err) {
+        console.error('Status update failed:', err);
+      }
     }
 
     async function verifyAndDeliver(orderId) {
       const pin = document.getElementById(`pin-${orderId}`).value;
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'UPDATE_STATUS', orderId: orderId, newStatus: 'DELIVERED', pin: pin })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('Order ' + orderId + ' Delivered successfully!');
-        fetchOrders();
-      } else {
-        alert('Invalid PIN! Handoff verification failed.');
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'UPDATE_STATUS', orderId: orderId, newStatus: 'DELIVERED', pin: pin })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Order ' + orderId + ' Delivered successfully!');
+          fetchOrders();
+        } else {
+          alert('Invalid PIN! Handoff verification failed.');
+        }
+      } catch (err) {
+        console.error('Verification failed:', err);
       }
     }
 

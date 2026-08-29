@@ -1,5 +1,5 @@
 /**
- * REFLEX BACKEND LOGIC - FIXED & ALIGNED SCHEMAS
+ * REFLEX BACKEND LOGIC - FULLY INTEGRATED & ALIGNED
  */
 
 // Helper to append a new event to the audit trail
@@ -12,25 +12,48 @@ function logEvent(orderId, actor, action, oldStatus, newStatus, device = 'Web', 
   eventsSheet.appendRow([eventId, orderId, timestamp, actor, action, oldStatus, newStatus, device, syncStatus]);
 }
 
-// Simple state transition validator
-function updateOrderStatus(orderId, newStatus, actorRole) {
+// State transition validator, status updater, & rider re-assignment handler
+function updateOrderStatus(orderId, newStatus, actorRole, riderId = null, pin = null) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ordersSheet = ss.getSheetByName('Orders');
   const data = ordersSheet.getDataRange().getValues();
   
-  const validTransitions = {
-    'LOGGED': 'ASSIGNED',
-    'ASSIGNED': 'PICKED UP',
-    'PICKED UP': 'DELIVERED'
-  };
-  
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === orderId) {
       const currentStatus = data[i][6]; // Column 7: Status (Index 6)
+      const storedPin = String(data[i][8]); // Column 9: PIN (Index 8)
       
-      // Verify valid sequence
+      // 1. RE-ASSIGNMENT LOGIC (ASSIGNED -> ASSIGNED)
+      if (currentStatus === 'ASSIGNED' && newStatus === 'ASSIGNED') {
+        if (riderId) {
+          ordersSheet.getRange(i + 1, 8).setValue(riderId); // Update Rider ID
+        }
+        logEvent(orderId, actorRole, 'REASSIGN_RIDER', currentStatus, newStatus);
+        return { success: true, message: `Reassigned order ${orderId} to ${riderId}` };
+      }
+
+      // 2. PIN VERIFICATION FOR DELIVERED STATUS
+      if (newStatus === 'DELIVERED') {
+        if (String(pin).trim() !== storedPin.trim()) {
+          return { success: false, message: 'Invalid PIN! Handoff verification failed.' };
+        }
+      }
+
+      // 3. STANDARD TRANSITIONS (LOGGED -> ASSIGNED, ASSIGNED -> PICKED UP, PICKED UP -> DELIVERED)
+      const validTransitions = {
+        'LOGGED': 'ASSIGNED',
+        'ASSIGNED': 'PICKED UP',
+        'PICKED UP': 'DELIVERED'
+      };
+
       if (validTransitions[currentStatus] === newStatus) {
-        ordersSheet.getRange(i + 1, 7).setValue(newStatus);
+        ordersSheet.getRange(i + 1, 7).setValue(newStatus); // Update Status
+        
+        // Update Rider ID if assigning initial rider
+        if (riderId) {
+          ordersSheet.getRange(i + 1, 8).setValue(riderId);
+        }
+
         logEvent(orderId, actorRole, 'STATUS_UPDATE', currentStatus, newStatus);
         return { success: true, message: `Status updated from ${currentStatus} to ${newStatus}` };
       } else {
@@ -41,28 +64,67 @@ function updateOrderStatus(orderId, newStatus, actorRole) {
   return { success: false, message: 'Order ID not found' };
 }
 
-// Expose GET endpoint for fetching orders/riders
+// Expose GET endpoint for fetching orders safely
 function doGet(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const orders = ss.getSheetByName('Orders').getDataRange().getValues();
-  return ContentService.createTextOutput(JSON.stringify({ success: true, orders: orders }))
-    .setMimeType(ContentService.MimeType.JSON);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ordersSheet = ss.getSheetByName('Orders');
+    
+    if (!ordersSheet) {
+      return ContentService.createTextOutput(JSON.stringify({ success: true, orders: [] }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const data = ordersSheet.getDataRange().getValues();
+    
+    // If only headers exist or sheet is empty
+    if (!data || data.length <= 1) {
+      return ContentService.createTextOutput(JSON.stringify({ success: true, orders: [] }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const orders = [];
+    for (let i = 1; i < data.length; i++) {
+      // Only parse non-empty rows
+      if (data[i][0]) {
+        orders.push({
+          orderId: String(data[i][0] || ''),
+          customerName: String(data[i][1] || ''),
+          phone: String(data[i][2] || ''),
+          area: String(data[i][3] || ''),
+          landmark: String(data[i][4] || ''),
+          item: String(data[i][5] || ''),
+          status: String(data[i][6] || 'LOGGED'),
+          riderId: String(data[i][7] || 'Unassigned'),
+          pin: String(data[i][8] || ''),
+          timestamp: String(data[i][9] || '')
+        });
+      }
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ success: true, orders: orders }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    // Return error as JSON so CORS doesn't trigger
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
-// Expose POST endpoint for creating/updating orders
+// Expose POST endpoint for creating AND updating orders
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
+    // 1. CREATE ORDER (LOGGED)
     if (data.action === 'CREATE_ORDER') {
       const ordersSheet = ss.getSheetByName('Orders');
       const orderId = 'RX-' + Math.floor(1000 + Math.random() * 9000);
       const pin = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit PIN
       const timestamp = new Date();
       
-      // Exact alignment with resetDatabase schema:
-      // ['Order ID', 'Customer Name', 'Phone', 'Area', 'Landmark', 'Item', 'Status', 'Rider ID', 'PIN', 'Timestamp']
       ordersSheet.appendRow([
         orderId, 
         data.customerName || '', 
@@ -78,10 +140,23 @@ function doPost(e) {
       
       logEvent(orderId, 'Retailer', 'CREATE', '', 'LOGGED');
       
-      // Return both orderId AND pin to the frontend
       return ContentService.createTextOutput(JSON.stringify({ success: true, orderId: orderId, pin: pin }))
         .setMimeType(ContentService.MimeType.JSON);
     }
+    
+    // 2. UPDATE ORDER STATUS (ASSIGN, REASSIGN, PICKUP, DELIVER)
+    if (data.action === 'UPDATE_STATUS') {
+      const result = updateOrderStatus(
+        data.orderId, 
+        data.newStatus, 
+        data.actorRole || 'System', 
+        data.riderId, 
+        data.pin
+      );
+      return ContentService.createTextOutput(JSON.stringify(result))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
