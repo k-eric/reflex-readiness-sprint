@@ -277,3 +277,54 @@ function resetDatabase() {
 
   Logger.log("Database reset complete. Column mappings, ARRIVED status transitions, and Rider Operating Zones are synchronized!");
 }
+// Dynamic Column Finder Helper
+function getColumnMap(sheet) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const map = {};
+  headers.forEach((header, index) => {
+    map[header] = index + 1; // 1-based column index for Apps Script Range API
+  });
+  return map;
+}
+
+// Inside your handleUpdateStatus(payload) function:
+function handleUpdateStatus(payload) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ordersSheet = ss.getSheetByName("Orders");
+  const data = ordersSheet.getDataRange().getValues();
+  const colMap = getColumnMap(ordersSheet);
+  
+  const orderId = payload.orderId;
+  const newStatus = payload.newStatus;
+  
+  // Find matching row by Order ID (assuming Order ID is in column 1 / index 0)
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === orderId) {
+      const rowIndex = i + 1; // 1-based row index
+      
+      // Target correct columns dynamically using colMap
+      if (colMap["Status"]) {
+        ordersSheet.getRange(rowIndex, colMap["Status"]).setValue(newStatus);
+      }
+      
+      if (payload.riderId && colMap["Assigned Rider ID"]) {
+        ordersSheet.getRange(rowIndex, colMap["Assigned Rider ID"]).setValue(payload.riderId);
+      }
+      
+      if (payload.failureReason && colMap["Failure Reason"]) {
+        ordersSheet.getRange(rowIndex, colMap["Failure Reason"]).setValue(payload.failureReason);
+      }
+      
+      if (newStatus === "ARRIVED" && colMap["Arrival Timestamp"]) {
+        ordersSheet.getRange(rowIndex, colMap["Arrival Timestamp"]).setValue(new Date());
+      }
+      
+      // Log event to Audit Trail
+      logEvent(orderId, newStatus, payload.actorRole || "SYSTEM", payload.failureReason || "");
+      
+      return { success: true, message: `Order ${orderId} updated to ${newStatus}` };
+    }
+  }
+  
+  return { success: false, message: "Order ID not found" };
+}
