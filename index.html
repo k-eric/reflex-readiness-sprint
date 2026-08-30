@@ -23,21 +23,54 @@
 
     <!-- 1. Retailer View -->
     <section id="view-retailer" class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
-      <h2 class="text-lg font-bold border-b pb-2">Log New Delivery</h2>
+      <div class="flex justify-between items-center border-b pb-2">
+        <h2 class="text-lg font-bold">Log New Delivery</h2>
+        <!-- [TAG: RET-03] Retailer Verification Flag -->
+        <span class="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
+          ✓ Verified Retailer
+        </span>
+      </div>
       
-      <div>
-        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Shop / Business Name</label>
-        <input type="text" id="shopName" placeholder="e.g. Nairobi Electronics Hub" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+      <!-- Shop Details & Category -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Shop / Business Name</label>
+          <input type="text" id="shopName" placeholder="e.g. Nairobi Electronics Hub" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+        </div>
+        <!-- [TAG: RET-01] Retailer Type Dropdown -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Retailer Category</label>
+          <select id="shopType" class="w-full border p-2 rounded text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+            <option value="Electronics"> Electronics</option>
+            <option value="Pharmacy"> Pharmacy / Healthcare</option>
+            <option value="Hardware"> Hardware & Tools</option>
+            <option value="FMCG / Grocery"> FMCG / Grocery</option>
+            <option value="Apparel / Fashion"> Apparel / Fashion</option>
+            <option value="General Retail"> General Retail</option>
+          </select>
+        </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
+      <!-- [TAG: RET-02] Shop / Dispatch Pickup Location -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Pickup Location / Shop Address</label>
+        <input type="text" id="pickupLocation" placeholder="e.g. Luthuli Avenue, Electronic House Floor 2, Shop B4" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+      </div>
+
+      <!-- Item Specifications -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+        <div class="md:col-span-6">
           <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Item Description</label>
           <input type="text" id="item" placeholder="e.g. Samsung TV" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
         </div>
-        <div>
+        <div class="md:col-span-4">
           <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Specific Model / SKU</label>
           <input type="text" id="itemModel" placeholder="e.g. 55'' AU7000 Crystal UHD" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+        </div>
+        <!-- [TAG: ORD-01] Quantity Field -->
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Quantity</label>
+          <input type="number" id="itemQty" value="1" min="1" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold text-center">
         </div>
       </div>
 
@@ -131,7 +164,7 @@
 
       <!-- Active Fleet Roster -->
       <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 space-y-2">
-        <h3 class="text-xs font-bold uppercase text-indigo-900">Active Fleet Vehicles & Capacity Limits</h3>
+        <h3 class="text-xs font-bold uppercase text-indigo-900">Active Fleet Vehicles & Operating Zones</h3>
         <div id="fleet-roster" class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
           <p class="text-gray-400 italic">Loading rider fleet...</p>
         </div>
@@ -266,8 +299,13 @@
 
     async function submitOrder() {
       const shopName = document.getElementById('shopName').value.trim() || 'Unspecified Shop';
+      const shopType = document.getElementById('shopType').value; // [TAG: RET-01]
+      const pickupLocation = document.getElementById('pickupLocation').value.trim() || 'Nairobi CBD Main Hub'; // [TAG: RET-02]
+      
       const item = document.getElementById('item').value.trim();
       const itemModel = document.getElementById('itemModel').value.trim() || 'N/A';
+      const itemQty = parseInt(document.getElementById('itemQty').value || '1'); // [TAG: ORD-01]
+      
       const custName = document.getElementById('custName').value.trim();
       const phone = document.getElementById('custPhone').value.trim();
       
@@ -296,8 +334,12 @@
       const payload = {
         action: 'CREATE_ORDER',
         shopName: shopName,
+        shopType: shopType, // [TAG: RET-01]
+        pickupLocation: pickupLocation, // [TAG: RET-02]
+        isVerifiedRetailer: true, // [TAG: RET-03]
         item: item,
         itemModel: itemModel,
+        itemQty: itemQty, // [TAG: ORD-01]
         customerName: custName,
         phone: phone,
         area: area,
@@ -324,8 +366,10 @@
         if (data.success) {
           alert('Order Created: ' + data.orderId + '\nVerification PIN: ' + data.pin);
           document.getElementById('shopName').value = '';
+          document.getElementById('pickupLocation').value = '';
           document.getElementById('item').value = '';
           document.getElementById('itemModel').value = '';
+          document.getElementById('itemQty').value = '1';
           document.getElementById('custName').value = '';
           document.getElementById('custPhone').value = '';
           document.getElementById('area').value = '';
@@ -360,6 +404,7 @@
 
     setInterval(fetchOrders, 5000);
 
+    // [TAG: RDR-01] Render Fleet Roster with Operating Zone
     function renderFleetRoster() {
       const container = document.getElementById('fleet-roster');
       if (fleetRiders.length === 0) {
@@ -370,13 +415,15 @@
         <div class="bg-white p-2 rounded border border-indigo-100 flex justify-between items-center">
           <div>
             <strong class="text-gray-900">${r.name}</strong> (${r.riderId})
-            <p class="text-[10px] text-gray-500">🚲 ${r.vehicle} • Max ${r.maxRangeKm}km</p>
+            <p class="text-[10px] text-gray-500">🚲 ${r.vehicle || 'Motorbike'} • Max ${r.maxRangeKm || 15}km</p>
+            <p class="text-[10px] text-indigo-700 font-semibold"> Zone: ${r.operatingZone || 'Central Nairobi'}</p>
           </div>
-          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">${r.status}</span>
+          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">${r.status || 'ACTIVE'}</span>
         </div>
       `).join('');
     }
 
+    // [TAG: TRK-02] Dispatcher View with Arrival Badges & Cargo/Distance Checks
     function renderDispatcherUI() {
       const activeContainer = document.getElementById('dispatcher-orders-list');
       const failedContainer = document.getElementById('failed-orders-list');
@@ -390,7 +437,7 @@
         failedContainer.innerHTML = failedOrders.map(o => `
           <div class="border border-red-300 p-3 rounded bg-white flex justify-between items-center">
             <div>
-              <p class="font-bold text-red-900">${o.orderId} - ${o.item} <span class="text-xs text-gray-500">(${o.shopName})</span></p>
+              <p class="font-bold text-red-900">${o.orderId} - ${o.item} (x${o.itemQty || 1}) <span class="text-xs text-gray-500">(${o.shopName})</span></p>
               <p class="text-xs text-red-700 font-medium mt-0.5"> Reason: ${o.failureReason || 'Not specified'}</p>
               <p class="text-xs text-gray-600">Previous Rider: ${o.riderId} | Customer: ${o.customerName} (${o.phone})</p>
             </div>
@@ -410,18 +457,30 @@
         return;
       }
       
-      activeContainer.innerHTML = activeOrders.map(o => `
+      activeContainer.innerHTML = activeOrders.map(o => {
+        // [TAG: RDR-02] Check bulky cargo suitability
+        const isBulky = o.item.toLowerCase().includes('tv') || o.item.toLowerCase().includes('fridge') || o.itemModel.toLowerCase().includes('55');
+
+        return `
         <div class="border p-3.5 rounded-lg flex justify-between items-center bg-gray-50 space-y-1">
           <div>
             <div class="flex items-center gap-2 mb-1">
-              <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">${o.shopName || 'Unspecified'}</span>
-              <span class="text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded font-semibold">${o.status}</span>
+              <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">${o.shopName || 'Unspecified'} (${o.shopType || 'General'})</span>
+              
+              <!-- [TAG: TRK-02] Arrival Alert Badge -->
+              ${o.status === 'ARRIVED' ? `
+                <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-indigo-600 text-white animate-pulse"> RIDER ARRIVED</span>
+              ` : `
+                <span class="text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded font-semibold">${o.status}</span>
+              `}
+
               ${o.isUrgent ? '<span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-red-600 text-white animate-pulse"> URGENT</span>' : ''}
-              ${o.isOutOfZone ? '<span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-500 text-white">⚠️ OUT OF ZONE</span>' : ''}
+              ${o.isOutOfZone ? '<span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-500 text-white"> OUT OF ZONE</span>' : ''}
             </div>
             
-            <p class="font-bold text-gray-900 text-sm">${o.orderId} - ${o.item} <span class="text-xs font-normal text-gray-500">(${o.itemModel || 'N/A'})</span></p>
-            <p class="text-xs text-gray-600">${o.customerName} (${o.phone}) |  ${o.landmark}, ${o.area} (${o.estimatedDistance || 0} km)</p>
+            <p class="font-bold text-gray-900 text-sm">${o.orderId} - ${o.item} (x${o.itemQty || 1}) <span class="text-xs font-normal text-gray-500">(${o.itemModel || 'N/A'})</span></p>
+            <p class="text-xs text-gray-600">Pickup: ${o.pickupLocation || 'Nairobi CBD'} ➔ Drop: ${o.landmark}, ${o.area} (${o.estimatedDistance || 0} km)</p>
+            <p class="text-xs text-gray-600">Customer: ${o.customerName} (${o.phone})</p>
             
             ${o.deliveryType === 'Scheduled' ? `
               <p class="text-xs font-semibold text-blue-700 mt-1"> Scheduled: ${o.deliveryDate} @ ${o.timeSlot}</p>
@@ -432,11 +491,20 @@
             ${o.status === 'LOGGED' ? `
               <div class="flex items-center gap-2">
                 <select id="assign-select-${o.orderId}" class="text-xs border p-1.5 rounded bg-white">
-                  ${fleetRiders.map(r => `
-                    <option value="${r.riderId}" ${o.estimatedDistance > r.maxRangeKm ? 'disabled class="text-red-400 bg-red-50"' : ''}>
-                      ${r.name} (${r.vehicle} - ${r.maxRangeKm}km) ${o.estimatedDistance > r.maxRangeKm ? ' Exceeds Limit' : ''}
-                    </option>
-                  `).join('')}
+                  ${fleetRiders.map(r => {
+                    // [TAG: RDR-02] Disable motorbikes for bulky items
+                    const isBicycleOrBike = (r.vehicle || '').toLowerCase().includes('bike') || (r.vehicle || '').toLowerCase().includes('motorbike');
+                    const cargoUnsuitable = isBulky && isBicycleOrBike;
+                    const rangeExceeded = o.estimatedDistance > r.maxRangeKm;
+                    const isDisabled = rangeExceeded || cargoUnsuitable;
+
+                    return `
+                      <option value="${r.riderId}" ${isDisabled ? 'disabled class="text-red-400 bg-red-50"' : ''}>
+                        ${r.name} (${r.vehicle || 'Bike'} - ${r.maxRangeKm || 15}km) 
+                        ${rangeExceeded ? ' Exceeds Range' : cargoUnsuitable ? ' Cargo Too Bulky' : ''}
+                      </option>
+                    `;
+                  }).join('')}
                 </select>
                 <button onclick="executeAssignment('${o.orderId}')" class="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded hover:bg-indigo-700 font-medium">
                   Assign
@@ -445,12 +513,13 @@
             ` : `<span class="text-xs text-gray-500 font-semibold">Rider: ${o.riderId}</span>`}
           </div>
         </div>
-      `).join('');
+      `}).join('');
     }
 
+    // [TAG: TRK-01] Rider UI with "I've Arrived" status step
     function renderRiderUI() {
       const container = document.getElementById('rider-orders-list');
-      const riderJobs = liveOrders.filter(o => o.status === 'ASSIGNED' || o.status === 'PICKED UP');
+      const riderJobs = liveOrders.filter(o => o.status === 'ASSIGNED' || o.status === 'PICKED UP' || o.status === 'ARRIVED');
       if (riderJobs.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">No active delivery assignments.</p>'; return; }
 
       container.innerHTML = riderJobs.map(o => `
@@ -461,18 +530,22 @@
                 <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">${o.shopName || 'Unspecified'}</span>
                 ${o.isUrgent ? '<span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-red-600 text-white"> URGENT</span>' : ''}
               </div>
-              <p class="font-bold text-gray-900">${o.orderId} - ${o.item} <span class="text-xs font-normal text-gray-500">(${o.itemModel || 'N/A'})</span></p>
+              <p class="font-bold text-gray-900">${o.orderId} - ${o.item} (x${o.itemQty || 1}) <span class="text-xs font-normal text-gray-500">(${o.itemModel || 'N/A'})</span></p>
             </div>
-            <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded font-semibold">${o.status}</span>
+            <span class="text-xs ${o.status === 'ARRIVED' ? 'bg-indigo-100 text-indigo-800' : 'bg-yellow-100 text-yellow-800'} px-2 py-0.5 rounded font-semibold">${o.status}</span>
           </div>
           
+          <p class="text-xs text-gray-600">Pickup: <strong>${o.pickupLocation || 'Nairobi CBD'}</strong></p>
           <p class="text-sm text-gray-600">Deliver to: <strong>${o.customerName}</strong> (${o.phone}) |  ${o.landmark}, ${o.area} (${o.estimatedDistance || 0} km)</p>
           
           ${o.deliveryType === 'Scheduled' ? `<p class="text-xs text-blue-700 font-medium"> Window: ${o.deliveryDate} (${o.timeSlot})</p>` : ''}
           
+          <!-- [TAG: TRK-01] Status Actions -->
           <div class="flex flex-wrap gap-2 pt-1 border-t">
             ${o.status === 'ASSIGNED' ? `
               <button onclick="updateStatus('${o.orderId}', 'PICKED UP')" class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-amber-700">Mark Picked Up</button>
+            ` : o.status === 'PICKED UP' ? `
+              <button onclick="updateStatus('${o.orderId}', 'ARRIVED')" class="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-indigo-700"> I've Arrived</button>
             ` : `
               <input type="text" id="pin-${o.orderId}" placeholder="Enter 4-Digit PIN" class="border p-1 text-xs rounded w-32 focus:ring-1 focus:ring-blue-500 outline-none">
               <button onclick="verifyAndDeliver('${o.orderId}')" class="bg-green-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-green-700">Verify PIN & Complete</button>
