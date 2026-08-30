@@ -10,7 +10,7 @@
   <div class="max-w-4xl mx-auto space-y-6">
     <!-- Header -->
     <header class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border">
-      <h1 class="text-xl font-bold text-gray-800">REFLEX <span class="text-xs font-normal text-gray-500">| Delivery Control</span></h1>
+      <h1 class="text-xl font-bold text-gray-800">REFLEX <span class="text-xs font-normal text-gray-500">| Delivery Control System</span></h1>
       <span id="sync-status" class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold">Online & Synced</span>
     </header>
 
@@ -24,22 +24,135 @@
     <!-- 1. Retailer View -->
     <section id="view-retailer" class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
       <h2 class="text-lg font-bold border-b pb-2">Log New Delivery</h2>
-      <div class="grid grid-cols-2 gap-4">
-        <input type="text" id="custName" placeholder="Customer Name" class="border p-2 rounded">
-        <input type="text" id="custPhone" placeholder="Phone Number" class="border p-2 rounded">
-        <input type="text" id="area" placeholder="Area (e.g. Kasarani)" class="border p-2 rounded">
-        <input type="text" id="landmark" placeholder="Landmark (Landmark-first address)" class="border p-2 rounded">
+      
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Shop / Business Name</label>
+        <input type="text" id="shopName" placeholder="e.g. Nairobi Electronics Hub" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
       </div>
-      <input type="text" id="item" placeholder="Item Description (e.g. Samsung TV)" class="w-full border p-2 rounded">
-      <button onclick="submitOrder()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Submit Delivery Request</button>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Item Description</label>
+          <input type="text" id="item" placeholder="e.g. Samsung TV" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Specific Model / SKU</label>
+          <input type="text" id="itemModel" placeholder="e.g. 55'' AU7000 Crystal UHD" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Customer Name</label>
+          <input type="text" id="custName" placeholder="Customer Name" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Retailer / Customer Phone (KE)</label>
+          <input type="tel" id="custPhone" placeholder="e.g. 0712345678 or +254712345678" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+        </div>
+      </div>
+
+      <!-- Freeform Input with Autocomplete & Auto-Distance Detection -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Delivery Location / Area Name</label>
+          <input type="text" id="area" list="location-suggestions" oninput="autoDetectDistance()" placeholder="Type custom location or select suggested area..." class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+          <datalist id="location-suggestions">
+            <option value="Nairobi CBD">
+            <option value="Westlands">
+            <option value="Kilimani">
+            <option value="Yaya Centre">
+            <option value="Kasarani">
+            <option value="Imara Daima">
+            <option value="Karen">
+            <option value="Thika">
+            <option value="Karatina">
+          </datalist>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Est. Distance (km)</label>
+          <input type="number" id="distanceKm" oninput="calculateZoneDistance()" placeholder="Auto-calculated" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-gray-50">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Specific Landmark / Address</label>
+        <input type="text" id="landmark" placeholder="e.g. Near Shell Station, Gate 4" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+      </div>
+
+      <div id="zone-alert-banner" class="hidden p-2.5 rounded text-xs font-semibold flex justify-between items-center bg-gray-100 text-gray-700">
+        <span>Estimated Distance: <strong id="zone-distance">0 km</strong></span>
+        <span id="zone-flag" class="px-2 py-0.5 rounded bg-green-200 text-green-800">Within Service Radius</span>
+      </div>
+
+      <div class="border-t pt-4 space-y-3">
+        <h3 class="text-xs font-bold uppercase text-gray-500">Delivery Scheduling & Priority</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Delivery Priority</label>
+            <select id="deliveryType" onchange="toggleSchedulingFields()" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="Immediate"> Immediate Dispatch</option>
+              <option value="Scheduled"> Scheduled Delivery</option>
+            </select>
+          </div>
+          <div class="flex items-center pt-5">
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="isUrgent" class="sr-only peer">
+              <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+              <span class="ml-3 text-xs font-bold text-red-700 uppercase"> Flag Urgent / Time-Sensitive</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="scheduled-fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4 bg-blue-50 p-3 rounded border border-blue-200">
+          <div>
+            <label class="block text-xs font-semibold text-blue-900 uppercase mb-1">Preferred Date</label>
+            <input type="date" id="deliveryDate" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-blue-900 uppercase mb-1">Preferred Time Window</label>
+            <select id="timeSlot" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="08:00 AM – 10:00 AM">08:00 AM – 10:00 AM</option>
+              <option value="10:00 AM – 12:00 PM">10:00 AM – 12:00 PM</option>
+              <option value="12:00 PM – 02:00 PM">12:00 PM – 02:00 PM</option>
+              <option value="02:00 PM – 04:00 PM">04:00 PM – 06:00 PM</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button onclick="submitOrder()" class="w-full bg-blue-600 text-white font-bold py-2.5 rounded hover:bg-blue-700 transition">Submit Delivery Request</button>
     </section>
 
     <!-- 2. Dispatcher View -->
-    <section id="view-dispatcher" class="hidden bg-white p-6 rounded-xl shadow-sm border space-y-4">
+    <section id="view-dispatcher" class="hidden bg-white p-6 rounded-xl shadow-sm border space-y-6">
       <h2 class="text-lg font-bold border-b pb-2">Dispatcher Control Board</h2>
-      <p class="text-gray-500 text-sm">Active Orders in Pipeline:</p>
-      <div id="dispatcher-orders-list" class="space-y-3">
-        <p class="text-gray-400 italic">Loading orders...</p>
+
+      <!-- Active Fleet Roster -->
+      <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 space-y-2">
+        <h3 class="text-xs font-bold uppercase text-indigo-900">Active Fleet Vehicles & Capacity Limits</h3>
+        <div id="fleet-roster" class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+          <p class="text-gray-400 italic">Loading rider fleet...</p>
+        </div>
+      </div>
+
+      <!-- Failed Deliveries Section -->
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+        <h3 class="text-sm font-bold text-red-800 flex items-center gap-2">
+          <span> Failed Deliveries & Reassignments</span>
+        </h3>
+        <div id="failed-orders-list" class="space-y-3">
+          <p class="text-xs text-red-500 italic">No failed deliveries reported.</p>
+        </div>
+      </div>
+
+      <!-- Active Pipeline -->
+      <div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2">Active Orders Pipeline</h3>
+        <div id="dispatcher-orders-list" class="space-y-3">
+          <p class="text-gray-400 italic">Loading orders...</p>
+        </div>
       </div>
     </section>
 
@@ -55,7 +168,59 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbw3eDCe9bO3uHk0dx8KM_0jASQOBFcL98_Xnq9vjRCoUtcRj8gZFtuxWQXkhrERtsre/exec";
     let liveOrders = [];
+    let fleetRiders = [];
     let currentRole = 'retailer';
+
+    // Preset lookup mapping (Add as many common hubs as needed)
+    const KNOWN_LOCATIONS = {
+      'nairobi cbd': 3,
+      'cbd': 3,
+      'westlands': 7,
+      'kilimani': 6,
+      'yaya centre': 6,
+      'kasarani': 14,
+      'imara daima': 12,
+      'karen': 18,
+      'thika': 45,
+      'karatina': 130
+    };
+
+    function autoDetectDistance() {
+      const inputVal = document.getElementById('area').value.toLowerCase().trim();
+      const distField = document.getElementById('distanceKm');
+      
+      // Auto match preset names
+      if (KNOWN_LOCATIONS[inputVal]) {
+        distField.value = KNOWN_LOCATIONS[inputVal];
+      }
+      calculateZoneDistance();
+    }
+
+    function calculateZoneDistance() {
+      const distInput = document.getElementById('distanceKm').value;
+      const dist = parseInt(distInput || '0');
+      const banner = document.getElementById('zone-alert-banner');
+      const distEl = document.getElementById('zone-distance');
+      const flagEl = document.getElementById('zone-flag');
+
+      if (!distInput) {
+        banner.classList.add('hidden');
+        return;
+      }
+
+      banner.classList.remove('hidden');
+      distEl.innerText = dist + ' km';
+
+      if (dist > 20) {
+        banner.className = 'p-2.5 rounded text-xs font-semibold flex justify-between items-center bg-red-100 text-red-800 border border-red-300';
+        flagEl.className = 'px-2 py-0.5 rounded bg-red-600 text-white font-bold';
+        flagEl.innerText = ' OUT OF SERVICE ZONE';
+      } else {
+        banner.className = 'p-2.5 rounded text-xs font-semibold flex justify-between items-center bg-green-50 text-green-800 border border-green-200';
+        flagEl.className = 'px-2 py-0.5 rounded bg-green-200 text-green-900';
+        flagEl.innerText = '✓ Within Service Radius';
+      }
+    }
 
     function showRole(role) {
       currentRole = role;
@@ -73,7 +238,13 @@
       if (role === 'dispatcher' || role === 'rider') fetchOrders();
     }
 
-    // --- DAY 3: OFFLINE QUEUE RESILIENCE ---
+    function toggleSchedulingFields() {
+      const type = document.getElementById('deliveryType').value;
+      const schedBox = document.getElementById('scheduled-fields');
+      if (type === 'Scheduled') schedBox.classList.remove('hidden');
+      else schedBox.classList.add('hidden');
+    }
+
     function getQueue() { return JSON.parse(localStorage.getItem('reflex_offline_queue') || '[]'); }
     function saveQueue(q) { localStorage.setItem('reflex_offline_queue', JSON.stringify(q)); }
 
@@ -94,20 +265,56 @@
     window.addEventListener('online', processQueue);
 
     async function submitOrder() {
+      const shopName = document.getElementById('shopName').value.trim() || 'Unspecified Shop';
+      const item = document.getElementById('item').value.trim();
+      const itemModel = document.getElementById('itemModel').value.trim() || 'N/A';
+      const custName = document.getElementById('custName').value.trim();
+      const phone = document.getElementById('custPhone').value.trim();
+      
+      const area = document.getElementById('area').value.trim() || 'Unspecified Area';
+      const distance = parseInt(document.getElementById('distanceKm').value || '0');
+      const isOutOfZone = distance > 20;
+
+      const landmark = document.getElementById('landmark').value.trim();
+
+      const deliveryType = document.getElementById('deliveryType').value;
+      const isUrgent = document.getElementById('isUrgent').checked;
+      const deliveryDate = document.getElementById('deliveryDate').value;
+      const timeSlot = document.getElementById('timeSlot').value;
+
+      if (!item || !custName || !phone) {
+        alert("Please fill out mandatory fields (Item Description, Customer Name, and Phone Number).");
+        return;
+      }
+
+      const kePhoneRegex = /^(\+254|0)[71]\d{8}$/;
+      if (!kePhoneRegex.test(phone)) {
+        alert("Invalid Kenyan phone number format (+254... or 07.../01...).");
+        return;
+      }
+
       const payload = {
         action: 'CREATE_ORDER',
-        customerName: document.getElementById('custName').value,
-        phone: document.getElementById('custPhone').value,
-        area: document.getElementById('area').value,
-        landmark: document.getElementById('landmark').value,
-        item: document.getElementById('item').value
+        shopName: shopName,
+        item: item,
+        itemModel: itemModel,
+        customerName: custName,
+        phone: phone,
+        area: area,
+        landmark: landmark,
+        deliveryType: deliveryType,
+        isUrgent: isUrgent,
+        deliveryDate: deliveryDate,
+        timeSlot: timeSlot,
+        estimatedDistance: distance,
+        isOutOfZone: isOutOfZone
       };
 
       if (!navigator.onLine) {
         const queue = getQueue();
         queue.push(payload);
         saveQueue(queue);
-        alert('Offline! Saved to queue. Auto-sync will process when online.');
+        alert('Offline! Saved to queue.');
         return;
       }
 
@@ -116,57 +323,127 @@
         const data = await res.json();
         if (data.success) {
           alert('Order Created: ' + data.orderId + '\nVerification PIN: ' + data.pin);
-          // Clear inputs
+          document.getElementById('shopName').value = '';
+          document.getElementById('item').value = '';
+          document.getElementById('itemModel').value = '';
           document.getElementById('custName').value = '';
           document.getElementById('custPhone').value = '';
           document.getElementById('area').value = '';
+          document.getElementById('distanceKm').value = '';
           document.getElementById('landmark').value = '';
-          document.getElementById('item').value = '';
+          document.getElementById('isUrgent').checked = false;
+          document.getElementById('zone-alert-banner').classList.add('hidden');
+        } else {
+          alert('Error: ' + data.message);
         }
       } catch (err) {
         const queue = getQueue();
         queue.push(payload);
         saveQueue(queue);
-        alert('Network request failed. Saved to offline queue.');
+        alert('Network failed. Saved to offline queue.');
       }
     }
 
-    // FETCH ORDERS VIA GET & RENDER UI
     async function fetchOrders() {
       try {
         const response = await fetch(API_URL);
         const data = await response.json();
-        
         if (data.success) {
           liveOrders = data.orders || [];
+          fleetRiders = data.riders || [];
+          renderFleetRoster();
           renderDispatcherUI();
           renderRiderUI();
-        } else {
-          console.error('API Error:', data.error);
         }
-      } catch (err) {
-        console.error('Poll failed:', err);
-      }
+      } catch (err) { console.error('Poll failed:', err); }
     }
 
-    // Poll every 5 seconds
     setInterval(fetchOrders, 5000);
 
-    function renderDispatcherUI() {
-      const container = document.getElementById('dispatcher-orders-list');
-      if (liveOrders.length === 0) { container.innerHTML = '<p class="text-gray-400">No orders found.</p>'; return; }
-      
-      container.innerHTML = liveOrders.map(o => `
-        <div class="border p-3 rounded flex justify-between items-center bg-gray-50">
+    function renderFleetRoster() {
+      const container = document.getElementById('fleet-roster');
+      if (fleetRiders.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 italic">No riders registered.</p>';
+        return;
+      }
+      container.innerHTML = fleetRiders.map(r => `
+        <div class="bg-white p-2 rounded border border-indigo-100 flex justify-between items-center">
           <div>
-            <p class="font-bold">${o.orderId} - ${o.item} <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">${o.status}</span></p>
-            <p class="text-sm text-gray-600">${o.customerName} (${o.phone}) | ${o.landmark}, ${o.area}</p>
+            <strong class="text-gray-900">${r.name}</strong> (${r.riderId})
+            <p class="text-[10px] text-gray-500">🚲 ${r.vehicle} • Max ${r.maxRangeKm}km</p>
           </div>
-          ${o.status === 'LOGGED' ? `
-            <button onclick="updateStatus('${o.orderId}', 'ASSIGNED', 'Rider-1')" class="bg-indigo-600 text-white text-xs px-3 py-2 rounded hover:bg-indigo-700">
-              Assign Rider 1
-            </button>
-          ` : `<span class="text-xs text-gray-500 font-semibold">Rider: ${o.riderId}</span>`}
+          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">${r.status}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderDispatcherUI() {
+      const activeContainer = document.getElementById('dispatcher-orders-list');
+      const failedContainer = document.getElementById('failed-orders-list');
+      
+      const activeOrders = liveOrders.filter(o => o.status !== 'FAILED');
+      const failedOrders = liveOrders.filter(o => o.status === 'FAILED');
+
+      if (failedOrders.length === 0) {
+        failedContainer.innerHTML = '<p class="text-xs text-red-500 italic">No failed deliveries reported.</p>';
+      } else {
+        failedContainer.innerHTML = failedOrders.map(o => `
+          <div class="border border-red-300 p-3 rounded bg-white flex justify-between items-center">
+            <div>
+              <p class="font-bold text-red-900">${o.orderId} - ${o.item} <span class="text-xs text-gray-500">(${o.shopName})</span></p>
+              <p class="text-xs text-red-700 font-medium mt-0.5"> Reason: ${o.failureReason || 'Not specified'}</p>
+              <p class="text-xs text-gray-600">Previous Rider: ${o.riderId} | Customer: ${o.customerName} (${o.phone})</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="reassign-select-${o.orderId}" class="text-xs border p-1 rounded bg-white">
+                ${fleetRiders.map(r => `<option value="${r.riderId}">${r.name} (${r.vehicle} - ${r.maxRangeKm}km)</option>`).join('')}
+              </select>
+              <button onclick="executeReassignment('${o.orderId}')" class="bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700 font-medium">Reassign</button>
+              <button onclick="updateStatus('${o.orderId}', 'LOGGED')" class="bg-gray-600 text-white text-xs px-3 py-1 rounded hover:bg-gray-700 font-medium">Reset</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      if (activeOrders.length === 0) {
+        activeContainer.innerHTML = '<p class="text-gray-400 text-sm">No active orders found.</p>';
+        return;
+      }
+      
+      activeContainer.innerHTML = activeOrders.map(o => `
+        <div class="border p-3.5 rounded-lg flex justify-between items-center bg-gray-50 space-y-1">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">${o.shopName || 'Unspecified'}</span>
+              <span class="text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded font-semibold">${o.status}</span>
+              ${o.isUrgent ? '<span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-red-600 text-white animate-pulse"> URGENT</span>' : ''}
+              ${o.isOutOfZone ? '<span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-500 text-white">⚠️ OUT OF ZONE</span>' : ''}
+            </div>
+            
+            <p class="font-bold text-gray-900 text-sm">${o.orderId} - ${o.item} <span class="text-xs font-normal text-gray-500">(${o.itemModel || 'N/A'})</span></p>
+            <p class="text-xs text-gray-600">${o.customerName} (${o.phone}) |  ${o.landmark}, ${o.area} (${o.estimatedDistance || 0} km)</p>
+            
+            ${o.deliveryType === 'Scheduled' ? `
+              <p class="text-xs font-semibold text-blue-700 mt-1"> Scheduled: ${o.deliveryDate} @ ${o.timeSlot}</p>
+            ` : '<p class="text-xs font-semibold text-amber-700 mt-1"> Immediate Dispatch</p>'}
+          </div>
+
+          <div>
+            ${o.status === 'LOGGED' ? `
+              <div class="flex items-center gap-2">
+                <select id="assign-select-${o.orderId}" class="text-xs border p-1.5 rounded bg-white">
+                  ${fleetRiders.map(r => `
+                    <option value="${r.riderId}" ${o.estimatedDistance > r.maxRangeKm ? 'disabled class="text-red-400 bg-red-50"' : ''}>
+                      ${r.name} (${r.vehicle} - ${r.maxRangeKm}km) ${o.estimatedDistance > r.maxRangeKm ? ' Exceeds Limit' : ''}
+                    </option>
+                  `).join('')}
+                </select>
+                <button onclick="executeAssignment('${o.orderId}')" class="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded hover:bg-indigo-700 font-medium">
+                  Assign
+                </button>
+              </div>
+            ` : `<span class="text-xs text-gray-500 font-semibold">Rider: ${o.riderId}</span>`}
+          </div>
         </div>
       `).join('');
     }
@@ -174,47 +451,94 @@
     function renderRiderUI() {
       const container = document.getElementById('rider-orders-list');
       const riderJobs = liveOrders.filter(o => o.status === 'ASSIGNED' || o.status === 'PICKED UP');
-      if (riderJobs.length === 0) { container.innerHTML = '<p class="text-gray-400">No active delivery assignments.</p>'; return; }
+      if (riderJobs.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm">No active delivery assignments.</p>'; return; }
 
       container.innerHTML = riderJobs.map(o => `
-        <div class="border p-3 rounded space-y-2 bg-gray-50">
-          <p class="font-bold">${o.orderId} - ${o.item} <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">${o.status}</span></p>
-          <p class="text-sm text-gray-600">Deliver to: ${o.customerName} | ${o.landmark}</p>
-          <div class="flex gap-2">
+        <div class="border p-3 rounded space-y-3 bg-gray-50">
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">${o.shopName || 'Unspecified'}</span>
+                ${o.isUrgent ? '<span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-red-600 text-white"> URGENT</span>' : ''}
+              </div>
+              <p class="font-bold text-gray-900">${o.orderId} - ${o.item} <span class="text-xs font-normal text-gray-500">(${o.itemModel || 'N/A'})</span></p>
+            </div>
+            <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded font-semibold">${o.status}</span>
+          </div>
+          
+          <p class="text-sm text-gray-600">Deliver to: <strong>${o.customerName}</strong> (${o.phone}) |  ${o.landmark}, ${o.area} (${o.estimatedDistance || 0} km)</p>
+          
+          ${o.deliveryType === 'Scheduled' ? `<p class="text-xs text-blue-700 font-medium"> Window: ${o.deliveryDate} (${o.timeSlot})</p>` : ''}
+          
+          <div class="flex flex-wrap gap-2 pt-1 border-t">
             ${o.status === 'ASSIGNED' ? `
-              <button onclick="updateStatus('${o.orderId}', 'PICKED UP')" class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded">Mark Picked Up</button>
+              <button onclick="updateStatus('${o.orderId}', 'PICKED UP')" class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-amber-700">Mark Picked Up</button>
             ` : `
-              <input type="text" id="pin-${o.orderId}" placeholder="Enter 4-Digit PIN" class="border p-1 text-xs rounded w-32">
-              <button onclick="verifyAndDeliver('${o.orderId}')" class="bg-green-600 text-white text-xs px-3 py-1.5 rounded">Verify PIN & Complete</button>
+              <input type="text" id="pin-${o.orderId}" placeholder="Enter 4-Digit PIN" class="border p-1 text-xs rounded w-32 focus:ring-1 focus:ring-blue-500 outline-none">
+              <button onclick="verifyAndDeliver('${o.orderId}')" class="bg-green-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-green-700">Verify PIN & Complete</button>
             `}
+            
+            <button onclick="toggleFailureBox('${o.orderId}')" class="bg-red-100 text-red-700 border border-red-300 text-xs px-3 py-1.5 rounded font-medium hover:bg-red-200">
+              Report Failure
+            </button>
+          </div>
+
+          <div id="fail-box-${o.orderId}" class="hidden bg-red-50 p-2.5 rounded border border-red-200 space-y-2 mt-2">
+            <label class="block text-xs font-semibold text-red-800">Select Reason for Delivery Failure:</label>
+            <select id="reason-${o.orderId}" class="w-full text-xs border p-1.5 rounded bg-white">
+              <option value="Customer Unavailable">Customer Unavailable</option>
+              <option value="Incorrect Address">Incorrect Address</option>
+              <option value="Customer Refused">Customer Refused</option>
+              <option value="Customer Unreachable">Customer Unreachable</option>
+              <option value="Rider/Vehicle Problem">Rider/Vehicle Problem</option>
+            </select>
+            <button onclick="submitDeliveryFailure('${o.orderId}')" class="w-full bg-red-600 text-white text-xs py-1.5 rounded font-bold hover:bg-red-700">
+              Submit Failure & Notify Dispatcher
+            </button>
           </div>
         </div>
       `).join('');
     }
 
-    async function updateStatus(orderId, newStatus, riderId = null) {
-      const payload = {
-        action: 'UPDATE_STATUS',
-        orderId: orderId,
-        newStatus: newStatus,
-        riderId: riderId,
-        actorRole: currentRole
-      };
+    function toggleFailureBox(orderId) {
+      const box = document.getElementById(`fail-box-${orderId}`);
+      if (box) box.classList.toggle('hidden');
+    }
 
+    async function executeAssignment(orderId) {
+      const riderId = document.getElementById(`assign-select-${orderId}`).value;
+      updateStatus(orderId, 'ASSIGNED', riderId);
+    }
+
+    async function executeReassignment(orderId) {
+      const riderId = document.getElementById(`reassign-select-${orderId}`).value;
+      updateStatus(orderId, 'ASSIGNED', riderId);
+    }
+
+    async function submitDeliveryFailure(orderId) {
+      const reason = document.getElementById(`reason-${orderId}`).value;
+      const payload = { action: 'UPDATE_STATUS', orderId: orderId, newStatus: 'FAILED', failureReason: reason, actorRole: 'rider' };
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify(payload) 
-        });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
         const data = await res.json();
         if (data.success) {
-          fetchOrders(); // Refresh UI immediately
-        } else {
-          alert('Update failed: ' + data.message);
+          alert(`Order ${orderId} marked as FAILED (${reason}). Dispatcher notified.`);
+          fetchOrders();
         }
-      } catch (err) {
-        console.error('Status update failed:', err);
-      }
+      } catch (err) { console.error('Error logging failure:', err); }
+    }
+
+    async function updateStatus(orderId, newStatus, riderId = null) {
+      const payload = { action: 'UPDATE_STATUS', orderId: orderId, newStatus: newStatus, riderId: riderId, actorRole: currentRole };
+      try {
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (data.success) {
+          fetchOrders();
+        } else {
+          alert('Action Blocked: ' + data.message);
+        }
+      } catch (err) { console.error('Status update failed:', err); }
     }
 
     async function verifyAndDeliver(orderId) {
@@ -231,9 +555,7 @@
         } else {
           alert('Invalid PIN! Handoff verification failed.');
         }
-      } catch (err) {
-        console.error('Verification failed:', err);
-      }
+      } catch (err) { console.error('Verification failed:', err); }
     }
 
     window.addEventListener('DOMContentLoaded', () => { processQueue(); fetchOrders(); });
