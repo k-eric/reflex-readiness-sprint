@@ -2,7 +2,7 @@ function getColumnMap(sheet) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const map = {};
   headers.forEach((header, index) => {
-    map[header.toString().trim()] = index + 1; // 1-based index for Apps Script API
+    map[header.toString().trim()] = index + 1;
   });
   return map;
 }
@@ -89,7 +89,7 @@ function handleCreateOrder(payload) {
     "LOGGED",   // Status
     "",         // Assigned Rider ID
     pin,        // PIN
-    "",         // Failure Reason
+    "",         // Failure / Escalation Reason
     new Date(), // Created Timestamp
     ""          // Arrival Timestamp
   ]);
@@ -110,7 +110,25 @@ function handleUpdateStatus(payload) {
   
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === orderId) {
-      const rowIndex = i + 1; // 1-based sheet row index
+      const rowIndex = i + 1;
+      const storedPin = String(data[i][colMap["PIN"] - 1] || "").trim();
+      const customerPhone = String(data[i][colMap["Phone"] - 1] || "").trim();
+
+      // PIN / Manual Verification Check on Delivery
+      if (newStatus === "DELIVERED") {
+        if (payload.isManualOverride) {
+          // Manual Verification: Validate using last 4 digits of customer phone or dispatch override flag
+          const phoneTail = customerPhone.slice(-4);
+          if (payload.overrideCode !== phoneTail && !payload.dispatcherApproved) {
+            return { success: false, message: "Manual Override Failed: Verification code does not match customer phone tail." };
+          }
+          logEvent(orderId, "DELIVERED", payload.actorRole || "RIDER", `Manual Override Applied (${payload.overrideReason || "Lost PIN"})`);
+        } else if (payload.pin) {
+          if (String(payload.pin).trim() !== storedPin) {
+            return { success: false, message: "Invalid PIN! Handoff verification failed." };
+          }
+        }
+      }
       
       // Dynamically update fields based on column headers
       if (newStatus && colMap["Status"]) {
@@ -129,7 +147,7 @@ function handleUpdateStatus(payload) {
         ordersSheet.getRange(rowIndex, colMap["Arrival Timestamp"]).setValue(new Date());
       }
       
-      logEvent(orderId, newStatus || "UPDATED", payload.actorRole || "SYSTEM", payload.failureReason || "");
+      logEvent(orderId, newStatus || "UPDATED", payload.actorRole || "SYSTEM", payload.failureReason || payload.overrideReason || "");
       
       return { success: true, message: `Order ${orderId} updated successfully` };
     }
@@ -151,7 +169,6 @@ function logEvent(orderId, status, actor, details) {
 function resetDatabase() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // Setup Orders Sheet
   let ordersSheet = ss.getSheetByName("Orders");
   if (!ordersSheet) ordersSheet = ss.insertSheet("Orders");
   ordersSheet.clear();
@@ -163,7 +180,6 @@ function resetDatabase() {
     "Created Timestamp", "Arrival Timestamp"
   ]);
   
-  // Setup Riders Sheet
   let ridersSheet = ss.getSheetByName("Riders");
   if (!ridersSheet) ridersSheet = ss.insertSheet("Riders");
   ridersSheet.clear();
