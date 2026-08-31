@@ -1,293 +1,104 @@
-/**
- * REFLEX BACKEND LOGIC - ALL PHASES INTEGRATED (1, 2, 3 & 4)
- * Updated with Retailer Metadata, Quantity, Operating Zones & ARRIVED Status
- */
-
-function isValidKenyanPhone(phone) {
-  if (!phone) return false;
-  const cleanPhone = String(phone).trim().replace(/[\s-]/g, '');
-  return /^(\+254|0)[71]\d{8}$/.test(cleanPhone);
-}
-
-function logEvent(orderId, actor, action, oldStatus, newStatus, device = 'Web', syncStatus = 'Synced') {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const eventsSheet = ss.getSheetByName('Events');
-  if (!eventsSheet) return;
-  const eventId = 'EV-' + new Date().getTime();
-  const timestamp = new Date();
-  
-  eventsSheet.appendRow([eventId, orderId, timestamp, actor, action, oldStatus, newStatus, device, syncStatus]);
-}
-
-// Fetch full list of registered riders including Operating Zone
-function getRidersList() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const ridersSheet = ss.getSheetByName('Riders');
-  if (!ridersSheet) return [];
-  
-  const data = ridersSheet.getDataRange().getValues();
-  const riders = [];
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0]) {
-      riders.push({
-        riderId: String(data[i][0]),
-        name: String(data[i][1]),
-        phone: String(data[i][2]),
-        vehicle: String(data[i][3]),
-        maxRangeKm: Number(data[i][4]) || 15,
-        status: String(data[i][5] || 'ACTIVE'),
-        operatingZone: String(data[i][6] || 'Central Nairobi') // Added Operating Zone
-      });
-    }
-  }
-  return riders;
-}
-
-function updateOrderStatus(orderId, newStatus, actorRole, riderId = null, pin = null, failureReason = null) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const ordersSheet = ss.getSheetByName('Orders');
-  const data = ordersSheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === orderId) {
-      const currentStatus = data[i][10]; // Column index 10 is Status
-      const orderDistance = Number(data[i][21]) || 0; // Column index 21 is Est Distance
-
-      // Phase 3 Validation: Verify Rider Range Restrictions before assignment
-      if (riderId && (newStatus === 'ASSIGNED')) {
-        const riders = getRidersList();
-        const selectedRider = riders.find(r => r.riderId === riderId);
-        
-        if (selectedRider && orderDistance > selectedRider.maxRangeKm) {
-          return {
-            success: false,
-            message: `Assignment Blocked! ${selectedRider.name} (${selectedRider.vehicle}) has a max range of ${selectedRider.maxRangeKm}km, but this order is ${orderDistance}km.`
-          };
-        }
-      }
-
-      // Handle Reassignment
-      if ((currentStatus === 'ASSIGNED' || currentStatus === 'FAILED' || currentStatus === 'ARRIVED') && newStatus === 'ASSIGNED') {
-        if (riderId) ordersSheet.getRange(i + 1, 12).setValue(riderId); // Column 12: Rider ID
-        ordersSheet.getRange(i + 1, 11).setValue(newStatus); // Column 11: Status
-        logEvent(orderId, actorRole, 'REASSIGN_RIDER', currentStatus, newStatus);
-        return { success: true, message: `Reassigned order ${orderId} to ${riderId}` };
-      }
-
-      // Handle Delivery Failures
-      if (newStatus === 'FAILED') {
-        ordersSheet.getRange(i + 1, 11).setValue('FAILED');
-        if (failureReason) ordersSheet.getRange(i + 1, 15).setValue(failureReason); // Column 15: Failure Reason
-        logEvent(orderId, actorRole, 'DELIVERY_FAILED', currentStatus, 'FAILED');
-        return { success: true, message: `Order ${orderId} marked as FAILED (${failureReason})` };
-      }
-
-      // Handle Resetting Failed Orders
-      if (currentStatus === 'FAILED' && newStatus === 'LOGGED') {
-        ordersSheet.getRange(i + 1, 11).setValue('LOGGED');
-        ordersSheet.getRange(i + 1, 12).setValue('Unassigned');
-        ordersSheet.getRange(i + 1, 15).setValue('');
-        logEvent(orderId, actorRole, 'RESET_ORDER', currentStatus, 'LOGGED');
-        return { success: true, message: `Order ${orderId} reset back to LOGGED` };
-      }
-
-      // Handle PIN Verification upon Delivery
-      if (newStatus === 'DELIVERED') {
-        const storedPin = String(data[i][12]); // Column index 12 is PIN
-        if (String(pin).trim() !== storedPin.trim()) {
-          return { success: false, message: 'Invalid PIN! Handoff verification failed.' };
-        }
-      }
-
-      // Updated State Transitions including ARRIVED status
-      const validTransitions = {
-        'LOGGED': 'ASSIGNED',
-        'ASSIGNED': 'PICKED UP',
-        'PICKED UP': 'ARRIVED',
-        'ARRIVED': 'DELIVERED'
-      };
-
-      if (validTransitions[currentStatus] === newStatus) {
-        ordersSheet.getRange(i + 1, 11).setValue(newStatus); // Column 11: Status
-        if (riderId) ordersSheet.getRange(i + 1, 12).setValue(riderId); // Column 12: Rider ID
-        logEvent(orderId, actorRole, 'STATUS_UPDATE', currentStatus, newStatus);
-        return { success: true, message: `Status updated from ${currentStatus} to ${newStatus}` };
-      } else {
-        return { success: false, message: `Invalid transition from ${currentStatus} to ${newStatus}` };
-      }
-    }
-  }
-  return { success: false, message: 'Order ID not found' };
-}
-
-function doGet(e) {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const ordersSheet = ss.getSheetByName('Orders');
-    
-    const riders = getRidersList();
-
-    if (!ordersSheet) {
-      return ContentService.createTextOutput(JSON.stringify({ success: true, orders: [], riders: riders }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    const data = ordersSheet.getDataRange().getValues();
-    const orders = [];
-
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0]) {
-        orders.push({
-          orderId: String(data[i][0] || ''),
-          shopName: String(data[i][1] || 'Unspecified Shop'),
-          shopType: String(data[i][2] || 'General Retail'),
-          pickupLocation: String(data[i][3] || ''),
-          isVerifiedRetailer: Boolean(data[i][4]),
-          customerName: String(data[i][5] || ''),
-          phone: String(data[i][6] || ''),
-          area: String(data[i][7] || ''),
-          landmark: String(data[i][8] || ''),
-          item: String(data[i][9] || ''),
-          itemModel: String(data[i][10] || 'N/A'),
-          itemQty: Number(data[i][11]) || 1,
-          status: String(data[i][12] || 'LOGGED'),
-          riderId: String(data[i][13] || 'Unassigned'),
-          pin: String(data[i][14] || ''),
-          timestamp: String(data[i][15] || ''),
-          failureReason: String(data[i][16] || ''),
-          deliveryType: String(data[i][17] || 'Immediate'),
-          isUrgent: Boolean(data[i][18]),
-          deliveryDate: String(data[i][19] || ''),
-          timeSlot: String(data[i][20] || ''),
-          estimatedDistance: Number(data[i][21]) || 0,
-          isOutOfZone: Boolean(data[i][22])
-        });
-      }
-    }
-
-    return ContentService.createTextOutput(JSON.stringify({ success: true, orders: orders, riders: riders }))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    
-    if (data.action === 'CREATE_ORDER') {
-      const ordersSheet = ss.getSheetByName('Orders');
-      
-      if (!isValidKenyanPhone(data.phone)) {
-        return ContentService.createTextOutput(JSON.stringify({
-          success: false,
-          message: "Invalid Kenyan phone number format."
-        })).setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const orderId = 'RX-' + Math.floor(1000 + Math.random() * 9000);
-      const pin = Math.floor(1000 + Math.random() * 9000).toString();
-      const timestamp = new Date();
-      
-      ordersSheet.appendRow([
-        orderId, 
-        data.shopName || 'Unspecified Shop',
-        data.shopType || 'General Retail',
-        data.pickupLocation || 'Nairobi CBD Main Hub',
-        data.isVerifiedRetailer ? true : false,
-        data.customerName || '', 
-        data.phone || '', 
-        data.area || '', 
-        data.landmark || '', 
-        data.item || '', 
-        data.itemModel || 'N/A',
-        Number(data.itemQty) || 1,
-        'LOGGED', 
-        'Unassigned', 
-        pin, 
-        timestamp,
-        '', 
-        data.deliveryType || 'Immediate',
-        data.isUrgent ? true : false,
-        data.deliveryDate || '',
-        data.timeSlot || '',
-        Number(data.estimatedDistance) || 0,
-        data.isOutOfZone ? true : false
-      ]);
-      
-      logEvent(orderId, 'Retailer', 'CREATE', '', 'LOGGED');
-      
-      return ContentService.createTextOutput(JSON.stringify({ success: true, orderId: orderId, pin: pin }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    if (data.action === 'UPDATE_STATUS') {
-      const result = updateOrderStatus(
-        data.orderId, 
-        data.newStatus, 
-        data.actorRole || 'System', 
-        data.riderId, 
-        data.pin,
-        data.failureReason
-      );
-      return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
-    }
-
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function resetDatabase() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  let ordersSheet = ss.getSheetByName('Orders');
-  if (!ordersSheet) ordersSheet = ss.insertSheet('Orders');
-  else ordersSheet.clear();
-
-  ordersSheet.appendRow([
-    'Order ID', 'Shop Name', 'Shop Type', 'Pickup Location', 'Verified Retailer', 
-    'Customer Name', 'Phone', 'Area', 'Landmark', 'Item Description', 'Item Model', 
-    'Quantity', 'Status', 'Rider ID', 'PIN', 'Timestamp', 'Failure Reason', 
-    'Delivery Type', 'Is Urgent', 'Delivery Date', 'Time Slot', 'Est Distance (km)', 'Out of Zone'
-  ]);
-  ordersSheet.getRange("1:1").setFontWeight("bold").setBackground("#D9EAD3");
-
-  let eventsSheet = ss.getSheetByName('Events');
-  if (!eventsSheet) eventsSheet = ss.insertSheet('Events');
-  else eventsSheet.clear();
-
-  eventsSheet.appendRow(['Event ID', 'Order ID', 'Timestamp', 'Actor', 'Action', 'Old Status', 'New Status', 'Device', 'Sync Status']);
-  eventsSheet.getRange("1:1").setFontWeight("bold").setBackground("#FFF2CC");
-
-  let ridersSheet = ss.getSheetByName('Riders');
-  if (!ridersSheet) ridersSheet = ss.insertSheet('Riders');
-  else ridersSheet.clear();
-
-  ridersSheet.appendRow(['Rider ID', 'Name', 'Phone', 'Vehicle Type', 'Max Range (km)', 'Status', 'Operating Zone']);
-  ridersSheet.appendRow(['Rider-1', 'John Doe', '0700000001', 'Bicycle', 10, 'ACTIVE', 'CBD / Westlands']);
-  ridersSheet.appendRow(['Rider-2', 'Jane Smith', '0700000002', 'Boda Boda', 25, 'ACTIVE', 'Kilimani / Yaya']);
-  ridersSheet.appendRow(['Rider-3', 'Mark Kamau', '0700000003', 'Pickup Van', 150, 'ACTIVE', 'Greater Nairobi']);
-  ridersSheet.getRange("1:1").setFontWeight("bold").setBackground("#C9DAF8");
-
-  Logger.log("Database reset complete. Column mappings, ARRIVED status transitions, and Rider Operating Zones are synchronized!");
-}
-// Dynamic Column Finder Helper
 function getColumnMap(sheet) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const map = {};
   headers.forEach((header, index) => {
-    map[header] = index + 1; // 1-based column index for Apps Script Range API
+    map[header.toString().trim()] = index + 1; // 1-based index for Apps Script API
   });
   return map;
 }
 
-// Inside your handleUpdateStatus(payload) function:
+function doGet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ordersSheet = ss.getSheetByName("Orders");
+  const ridersSheet = ss.getSheetByName("Riders");
+  
+  const orders = ordersSheet ? ordersSheet.getDataRange().getValues() : [];
+  const riders = ridersSheet ? ridersSheet.getDataRange().getValues() : [];
+  
+  let parsedOrders = [];
+  if (orders.length > 1) {
+    const headers = orders[0];
+    parsedOrders = orders.slice(1).map(row => {
+      let obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i]; });
+      return obj;
+    });
+  }
+  
+  let parsedRiders = [];
+  if (riders.length > 1) {
+    const headers = riders[0];
+    parsedRiders = riders.slice(1).map(row => {
+      let obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i]; });
+      return obj;
+    });
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    orders: parsedOrders,
+    riders: parsedRiders
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    const payload = JSON.parse(e.postData.contents);
+    
+    if (payload.action === 'CREATE_ORDER') {
+      return ContentService.createTextOutput(JSON.stringify(handleCreateOrder(payload)))
+        .setMimeType(ContentService.MimeType.JSON);
+    } 
+    else if (payload.action === 'UPDATE_STATUS' || payload.action === 'VERIFY_PIN_DELIVER') {
+      return ContentService.createTextOutput(JSON.stringify(handleUpdateStatus(payload)))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function handleCreateOrder(payload) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ordersSheet = ss.getSheetByName("Orders");
+  
+  const orderId = "ORD-" + Math.floor(1000 + Math.random() * 9000);
+  const pin = Math.floor(1000 + Math.random() * 9000).toString();
+  
+  ordersSheet.appendRow([
+    orderId,
+    payload.shopName || "",
+    payload.shopType || "",
+    payload.isVerifiedRetailer ? "YES" : "NO",
+    payload.pickupLocation || "",
+    payload.item || "",
+    payload.itemModel || "",
+    payload.itemQty || 1,
+    payload.customerName || "",
+    payload.phone || "",
+    payload.area || "",
+    payload.landmark || "",
+    payload.estimatedDistance || 0,
+    payload.isOutOfZone ? "YES" : "NO",
+    payload.deliveryType || "Immediate",
+    payload.isUrgent ? "YES" : "NO",
+    payload.deliveryDate || "",
+    payload.timeSlot || "",
+    "LOGGED",   // Status
+    "",         // Assigned Rider ID
+    pin,        // PIN
+    "",         // Failure Reason
+    new Date(), // Created Timestamp
+    ""          // Arrival Timestamp
+  ]);
+  
+  logEvent(orderId, "LOGGED", "Retailer", "Order created");
+  
+  return { success: true, orderId: orderId, pin: pin };
+}
+
 function handleUpdateStatus(payload) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ordersSheet = ss.getSheetByName("Orders");
@@ -295,15 +106,14 @@ function handleUpdateStatus(payload) {
   const colMap = getColumnMap(ordersSheet);
   
   const orderId = payload.orderId;
-  const newStatus = payload.newStatus;
+  const newStatus = payload.newStatus || payload.status;
   
-  // Find matching row by Order ID (assuming Order ID is in column 1 / index 0)
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === orderId) {
-      const rowIndex = i + 1; // 1-based row index
+      const rowIndex = i + 1; // 1-based sheet row index
       
-      // Target correct columns dynamically using colMap
-      if (colMap["Status"]) {
+      // Dynamically update fields based on column headers
+      if (newStatus && colMap["Status"]) {
         ordersSheet.getRange(rowIndex, colMap["Status"]).setValue(newStatus);
       }
       
@@ -319,12 +129,47 @@ function handleUpdateStatus(payload) {
         ordersSheet.getRange(rowIndex, colMap["Arrival Timestamp"]).setValue(new Date());
       }
       
-      // Log event to Audit Trail
-      logEvent(orderId, newStatus, payload.actorRole || "SYSTEM", payload.failureReason || "");
+      logEvent(orderId, newStatus || "UPDATED", payload.actorRole || "SYSTEM", payload.failureReason || "");
       
-      return { success: true, message: `Order ${orderId} updated to ${newStatus}` };
+      return { success: true, message: `Order ${orderId} updated successfully` };
     }
   }
   
   return { success: false, message: "Order ID not found" };
+}
+
+function logEvent(orderId, status, actor, details) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let eventsSheet = ss.getSheetByName("Events");
+  if (!eventsSheet) {
+    eventsSheet = ss.insertSheet("Events");
+    eventsSheet.appendRow(["Timestamp", "Order ID", "Status", "Actor", "Details"]);
+  }
+  eventsSheet.appendRow([new Date(), orderId, status, actor, details]);
+}
+
+function resetDatabase() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Setup Orders Sheet
+  let ordersSheet = ss.getSheetByName("Orders");
+  if (!ordersSheet) ordersSheet = ss.insertSheet("Orders");
+  ordersSheet.clear();
+  ordersSheet.appendRow([
+    "Order ID", "Shop Name", "Shop Type", "Verified Retailer", "Pickup Location",
+    "Item", "Item Model", "Item Qty", "Customer Name", "Phone", "Area", "Landmark",
+    "Distance (km)", "Out of Zone", "Delivery Type", "Is Urgent", "Delivery Date",
+    "Time Slot", "Status", "Assigned Rider ID", "PIN", "Failure Reason",
+    "Created Timestamp", "Arrival Timestamp"
+  ]);
+  
+  // Setup Riders Sheet
+  let ridersSheet = ss.getSheetByName("Riders");
+  if (!ridersSheet) ridersSheet = ss.insertSheet("Riders");
+  ridersSheet.clear();
+  ridersSheet.appendRow(["riderId", "name", "phone", "vehicle", "maxRangeKm", "operatingZone", "status"]);
+  
+  ridersSheet.appendRow(["RDR-001", "John Kimani", "0711111111", "Motorbike", 15, "Nairobi CBD / Central", "ACTIVE"]);
+  ridersSheet.appendRow(["RDR-002", "Peter Otieno", "0722222222", "Bicycle", 8, "Westlands / Kilimani", "ACTIVE"]);
+  ridersSheet.appendRow(["RDR-003", "Mercy Wanjiku", "0733333333", "Van / Pickup", 50, "All Nairobi Zones", "ACTIVE"]);
 }
