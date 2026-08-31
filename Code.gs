@@ -6,35 +6,34 @@ function doGet() {
   
   const orders = ordersSheet ? ordersSheet.getDataRange().getValues() : [];
   const riders = ridersSheet ? ridersSheet.getDataRange().getValues() : [];
-  
-  // Convert header string to camelCase (e.g. "Order ID" -> "orderId")
-  function toCamelCase(str) {
-    return str.toString().trim()
-      .replace(/(?:^\w|[A-Z]|\b\w)/g, (letter, index) => 
-        index === 0 ? letter.toLowerCase() : letter.toUpperCase()
-      ).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+
+  function cleanHeader(str) {
+    return str.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
   let parsedOrders = [];
   if (orders.length > 1) {
-    const headers = orders[0];
+    const headers = orders[0].map(cleanHeader);
     parsedOrders = orders.slice(1).map(row => {
       let obj = {};
-      headers.forEach((h, i) => { 
-        if (h) obj[toCamelCase(h)] = row[i]; 
+      headers.forEach((h, i) => {
+        if (h) obj[h] = row[i];
       });
+      // Map explicit fallback properties for the frontend
+      obj.orderId = obj.orderid || obj.id || row[0] || '';
       return obj;
     });
   }
   
   let parsedRiders = [];
   if (riders.length > 1) {
-    const headers = riders[0];
+    const headers = riders[0].map(cleanHeader);
     parsedRiders = riders.slice(1).map(row => {
       let obj = {};
-      headers.forEach((h, i) => { 
-        if (h) obj[toCamelCase(h)] = row[i]; 
+      headers.forEach((h, i) => {
+        if (h) obj[h] = row[i];
       });
+      obj.riderId = obj.riderid || obj.id || row[0] || '';
       return obj;
     });
   }
@@ -58,6 +57,9 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify(handleUpdateStatus(payload)))
         .setMimeType(ContentService.MimeType.JSON);
     }
+    
+    return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Invalid action." }))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -66,7 +68,12 @@ function doPost(e) {
 
 function handleCreateOrder(payload) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const ordersSheet = ss.getSheetByName("Orders");
+  let ordersSheet = ss.getSheetByName("Orders");
+  
+  if (!ordersSheet) {
+    resetDatabase();
+    ordersSheet = ss.getSheetByName("Orders");
+  }
   
   const orderId = "ORD-" + Math.floor(1000 + Math.random() * 9000);
   const pin = Math.floor(1000 + Math.random() * 9000).toString();
@@ -91,11 +98,11 @@ function handleCreateOrder(payload) {
     payload.deliveryDate || "",
     payload.timeSlot || "",
     "LOGGED",   // status
-    "",         // riderId
-    pin,        // pin
-    "",         // failureReason
-    new Date(), // createdTimestamp
-    ""          // arrivalTimestamp
+    "",         // Assigned Rider ID
+    pin,        // PIN
+    "",         // Failure Reason
+    new Date(), // Created Timestamp
+    ""          // Arrival Timestamp
   ]);
   
   logEvent(orderId, "LOGGED", "Retailer", "Order created");
@@ -109,33 +116,65 @@ function handleUpdateStatus(payload) {
   const ordersSheet = ss.getSheetByName("Orders");
   const ridersSheet = ss.getSheetByName("Riders");
 
-  const data = ordersSheet.getDataRange().getValues();
-  const headers = data[0];
-
-  function getColIndex(name) {
-    return headers.findIndex(h => h.toString().trim() === name);
+  if (!ordersSheet) {
+    return { success: false, message: 'Orders sheet tab not found.' };
   }
 
-  const orderIdCol = getColIndex("Order ID");
-  const statusCol = getColIndex("Status");
-  const pinCol = getColIndex("PIN");
-  const phoneCol = getColIndex("Customer Phone");
-  const riderCol = getColIndex("Assigned Rider ID");
-  const distCol = getColIndex("Estimated Distance (km)");
-  const reasonCol = getColIndex("Failure Reason");
-  const arrivalCol = getColIndex("Arrival Timestamp");
+  const data = ordersSheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return { success: false, message: 'No orders exist in sheet.' };
+  }
 
-  if (orderIdCol === -1 || statusCol === -1) {
-    return { success: false, message: 'Sheet column header mismatch.' };
+  // Clean headers for exact matching
+  const headers = data[0].map(h => h.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+  function getColIndex(possibleNames) {
+    for (let name of possibleNames) {
+      const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const idx = headers.indexOf(cleanName);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  const orderIdCol = getColIndex(["Order ID", "orderid", "id"]);
+  const statusCol = getColIndex(["Status"]);
+  const pinCol = getColIndex(["PIN", "pin"]);
+  const phoneCol = getColIndex(["Customer Phone", "Phone", "custphone"]);
+  const riderCol = getColIndex(["Assigned Rider ID", "Rider ID", "riderid"]);
+  const distCol = getColIndex(["Estimated Distance (km)", "Estimated Distance", "Distance (km)", "distancekm"]);
+  const reasonCol = getColIndex(["Failure Reason", "failurereason"]);
+  const arrivalCol = getColIndex(["Arrival Timestamp", "arrivaltimestamp"]);
+
+  if (statusCol === -1) {
+    return { success: false, message: 'Sheet column header mismatch for Status.' };
   }
 
   let rowIndex = -1;
   let orderRowData = null;
+  const targetId = String(payload.orderId).trim().toUpperCase();
+
+  // Search by exact Order ID column first
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][orderIdCol]).trim() === String(payload.orderId).trim()) {
+    const sheetId = String(data[i][orderIdCol !== -1 ? orderIdCol : 0]).trim().toUpperCase();
+    if (sheetId === targetId) {
       rowIndex = i + 1;
       orderRowData = data[i];
       break;
+    }
+  }
+
+  // Fallback scan: check all columns in case header index was offset
+  if (rowIndex === -1) {
+    for (let i = 1; i < data.length; i++) {
+      for (let j = 0; j < data[i].length; j++) {
+        if (String(data[i][j]).trim().toUpperCase() === targetId) {
+          rowIndex = i + 1;
+          orderRowData = data[i];
+          break;
+        }
+      }
+      if (rowIndex !== -1) break;
     }
   }
 
@@ -146,7 +185,7 @@ function handleUpdateStatus(payload) {
   const currentStatus = String(orderRowData[statusCol]).trim().toUpperCase();
   const newStatus = String(payload.newStatus).trim().toUpperCase();
 
-  // [TASK-BE-2] Workflow State Machine Enforcement
+  // Workflow State Machine Enforcement
   const validTransitions = {
     'LOGGED': ['ASSIGNED', 'ESCALATED', 'FAILED'],
     'ASSIGNED': ['PICKED UP', 'ESCALATED', 'FAILED', 'LOGGED'],
@@ -160,24 +199,29 @@ function handleUpdateStatus(payload) {
     return { success: false, message: `Invalid transition: Cannot move order from ${currentStatus} to ${newStatus}.` };
   }
 
-  // [TASK-BE-3] Rider Range Guard
+  // Rider Range Guard
   if (newStatus === 'ASSIGNED' && payload.riderId) {
-    const riderData = ridersSheet.getDataRange().getValues();
-    const riderHeaders = riderData[0];
-    const rIdCol = riderHeaders.findIndex(h => h.toString().trim() === 'Rider ID');
-    const rRangeCol = riderHeaders.findIndex(h => h.toString().trim() === 'Max Range (km)');
+    if (ridersSheet) {
+      const riderData = ridersSheet.getDataRange().getValues();
+      if (riderData.length > 1) {
+        const riderHeaders = riderData[0].map(h => h.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+        const rIdCol = riderHeaders.indexOf('riderid');
+        const rRangeCol = riderHeaders.indexOf('maxrangekm');
 
-    let riderMaxRange = 15;
-    for (let r = 1; r < riderData.length; r++) {
-      if (String(riderData[r][rIdCol]).trim() === String(payload.riderId).trim()) {
-        riderMaxRange = parseFloat(riderData[r][rRangeCol]) || 15;
-        break;
+        let riderMaxRange = 15;
+        for (let r = 1; r < riderData.length; r++) {
+          const rId = String(riderData[r][rIdCol !== -1 ? rIdCol : 0]).trim().toUpperCase();
+          if (rId === String(payload.riderId).trim().toUpperCase()) {
+            riderMaxRange = parseFloat(riderData[r][rRangeCol !== -1 ? rRangeCol : 4]) || 15;
+            break;
+          }
+        }
+
+        const estDistance = distCol !== -1 ? (parseFloat(orderRowData[distCol]) || 0) : 0;
+        if (estDistance > riderMaxRange) {
+          return { success: false, message: `Rider range exceeded! Distance (${estDistance}km) exceeds max range (${riderMaxRange}km).` };
+        }
       }
-    }
-
-    const estDistance = parseFloat(orderRowData[distCol]) || 0;
-    if (estDistance > riderMaxRange) {
-      return { success: false, message: `Rider range exceeded! Distance (${estDistance}km) exceeds max range (${riderMaxRange}km).` };
     }
 
     if (riderCol !== -1) {
@@ -185,10 +229,10 @@ function handleUpdateStatus(payload) {
     }
   }
 
-  // [TASK-BE-1] Strict PIN & Manual Override Verification Logic
+  // Strict PIN & Manual Override Verification Logic
   if (newStatus === 'DELIVERED') {
     if (payload.isManualOverride) {
-      const custPhone = String(orderRowData[phoneCol] || '').trim();
+      const custPhone = phoneCol !== -1 ? String(orderRowData[phoneCol] || '').trim() : '';
       const expectedPhoneTail = custPhone.slice(-4);
       if (String(payload.overrideCode).trim() !== expectedPhoneTail && !payload.dispatcherApproved) {
         return { success: false, message: 'Manual override failed: Phone tail digits do not match.' };
@@ -197,7 +241,7 @@ function handleUpdateStatus(payload) {
         ordersSheet.getRange(rowIndex, reasonCol + 1).setValue(`OVERRIDE: ${payload.overrideReason || "Lost PIN"}`);
       }
     } else {
-      const storedPin = String(orderRowData[pinCol] || '').trim();
+      const storedPin = pinCol !== -1 ? String(orderRowData[pinCol] || '').trim() : '';
       const submittedPin = String(payload.pin || '').trim();
 
       if (!submittedPin || submittedPin !== storedPin) {
