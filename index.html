@@ -49,7 +49,7 @@
         </div>
       </div>
 
-      <!-- Shop / Dispatch Pickup Location -->
+      <!-- Shop Pickup Location -->
       <div>
         <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Pickup Location / Shop Address</label>
         <input type="text" id="pickupLocation" placeholder="e.g. Luthuli Avenue, Electronic House Floor 2, Shop B4" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
@@ -82,7 +82,7 @@
         </div>
       </div>
 
-      <!-- Freeform Input with Autocomplete & Auto-Distance Detection -->
+      <!-- Distance Detection -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="md:col-span-2">
           <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Delivery Location / Area Name</label>
@@ -117,7 +117,6 @@
 
       <div class="border-t pt-4 space-y-3">
         <h3 class="text-xs font-bold uppercase text-gray-500">Delivery Scheduling & Priority</h3>
-        
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Delivery Priority</label>
@@ -202,25 +201,15 @@
     let currentRole = 'retailer';
 
     const KNOWN_LOCATIONS = {
-      'nairobi cbd': 3,
-      'cbd': 3,
-      'westlands': 7,
-      'kilimani': 6,
-      'yaya centre': 6,
-      'kasarani': 14,
-      'imara daima': 12,
-      'karen': 18,
-      'thika': 45,
-      'karatina': 130
+      'nairobi cbd': 3, 'cbd': 3, 'westlands': 7, 'kilimani': 6,
+      'yaya centre': 6, 'kasarani': 14, 'imara daima': 12, 'karen': 18,
+      'thika': 45, 'karatina': 130
     };
 
     function autoDetectDistance() {
       const inputVal = document.getElementById('area').value.toLowerCase().trim();
       const distField = document.getElementById('distanceKm');
-      
-      if (KNOWN_LOCATIONS[inputVal]) {
-        distField.value = KNOWN_LOCATIONS[inputVal];
-      }
+      if (KNOWN_LOCATIONS[inputVal]) distField.value = KNOWN_LOCATIONS[inputVal];
       calculateZoneDistance();
     }
 
@@ -231,11 +220,7 @@
       const distEl = document.getElementById('zone-distance');
       const flagEl = document.getElementById('zone-flag');
 
-      if (!distInput) {
-        banner.classList.add('hidden');
-        return;
-      }
-
+      if (!distInput) { banner.classList.add('hidden'); return; }
       banner.classList.remove('hidden');
       distEl.innerText = dist + ' km';
 
@@ -300,20 +285,15 @@
       const shopName = document.getElementById('shopName').value.trim() || 'Unspecified Shop';
       const shopType = document.getElementById('shopType').value;
       const pickupLocation = document.getElementById('pickupLocation').value.trim() || 'Nairobi CBD Main Hub';
-      
       const item = document.getElementById('item').value.trim();
       const itemModel = document.getElementById('itemModel').value.trim() || 'N/A';
       const itemQty = parseInt(document.getElementById('itemQty').value || '1');
-      
       const custName = document.getElementById('custName').value.trim();
       const phone = document.getElementById('custPhone').value.trim();
-      
       const area = document.getElementById('area').value.trim() || 'Unspecified Area';
       const distance = parseInt(document.getElementById('distanceKm').value || '0');
       const isOutOfZone = distance > 20;
-
       const landmark = document.getElementById('landmark').value.trim();
-
       const deliveryType = document.getElementById('deliveryType').value;
       const isUrgent = document.getElementById('isUrgent').checked;
       const deliveryDate = document.getElementById('deliveryDate').value;
@@ -331,32 +311,14 @@
       }
 
       const payload = {
-        action: 'CREATE_ORDER',
-        shopName: shopName,
-        shopType: shopType,
-        pickupLocation: pickupLocation,
-        isVerifiedRetailer: true,
-        item: item,
-        itemModel: itemModel,
-        itemQty: itemQty,
-        customerName: custName,
-        phone: phone,
-        area: area,
-        landmark: landmark,
-        deliveryType: deliveryType,
-        isUrgent: isUrgent,
-        deliveryDate: deliveryDate,
-        timeSlot: timeSlot,
-        estimatedDistance: distance,
-        isOutOfZone: isOutOfZone
+        action: 'CREATE_ORDER', shopName, shopType, pickupLocation, isVerifiedRetailer: true,
+        item, itemModel, itemQty, customerName: custName, phone, area, landmark,
+        deliveryType, isUrgent, deliveryDate, timeSlot, estimatedDistance: distance, isOutOfZone
       };
 
       if (!navigator.onLine) {
-        const queue = getQueue();
-        queue.push(payload);
-        saveQueue(queue);
-        alert('Offline! Saved to queue.');
-        return;
+        const queue = getQueue(); queue.push(payload); saveQueue(queue);
+        alert('Offline! Saved to queue.'); return;
       }
 
       try {
@@ -380,13 +342,9 @@
           document.getElementById('landmark').value = '';
           document.getElementById('isUrgent').checked = false;
           document.getElementById('zone-alert-banner').classList.add('hidden');
-        } else {
-          alert('Error: ' + data.message);
-        }
+        } else alert('Error: ' + data.message);
       } catch (err) {
-        const queue = getQueue();
-        queue.push(payload);
-        saveQueue(queue);
+        const queue = getQueue(); queue.push(payload); saveQueue(queue);
         alert('Network failed. Saved to offline queue.');
       }
     }
@@ -554,12 +512,12 @@
                   <button onclick="verifyAndDeliver('${o.orderId}')" class="bg-green-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-green-700">Verify PIN & Complete</button>
                 </div>
                 
-                <!-- Lost PIN Override Trigger -->
+                <!-- TASK-FT-2: Lost PIN Override Trigger -->
                 <button type="button" onclick="toggleManualOverride('${o.orderId}')" class="text-xs text-blue-600 underline block">
                   Lost PIN? Request Manual Override
                 </button>
 
-                <!-- Manual Override Input Container -->
+                <!-- TASK-FT-2: Manual Override Form -->
                 <div id="manual-override-container-${o.orderId}" class="mt-2 p-2.5 bg-yellow-50 border border-yellow-200 rounded text-xs hidden">
                   <p class="font-bold text-yellow-800 mb-1">⚠️ Customer Lost PIN?</p>
                   <p class="text-gray-600 mb-2">Enter last 4 digits of customer's phone number:</p>
@@ -571,12 +529,13 @@
               </div>
             `}
             
+            <!-- TASK-FT-1: Report Issue Trigger -->
             <button onclick="toggleFailureBox('${o.orderId}')" class="bg-red-100 text-red-700 border border-red-300 text-xs px-3 py-1.5 rounded font-medium hover:bg-red-200 mt-2">
               🚨 Report Issue / Item Damaged
             </button>
           </div>
 
-          <!-- Issue Escalation Box -->
+          <!-- TASK-FT-1: Issue Escalation Form -->
           <div id="fail-box-${o.orderId}" class="hidden bg-red-50 p-2.5 rounded border border-red-200 space-y-2 mt-2">
             <label class="block text-xs font-semibold text-red-800">Select Escalation / Damage Issue:</label>
             <select id="reason-${o.orderId}" class="w-full text-xs border p-1.5 rounded bg-white">
@@ -616,6 +575,7 @@
       updateStatus(orderId, 'ASSIGNED', riderId);
     }
 
+    // --- [TASK-FT-1] Escalation & Damage Logic ---
     async function submitDeliveryFailure(orderId) {
       const reason = document.getElementById(`reason-${orderId}`).value;
       const details = document.getElementById(`details-${orderId}`).value.trim();
@@ -678,6 +638,7 @@
       } catch (err) { console.error('Verification failed:', err); }
     }
 
+    // --- [TASK-FT-2] Manual Override Logic ---
     async function submitManualDelivery(orderId) {
       const phoneTail = document.getElementById(`phoneTail-${orderId}`).value.trim();
 
