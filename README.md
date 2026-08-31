@@ -1,10 +1,40 @@
  ## Executive Summary & System Brief
-Reflex is a real-time readiness and dispatch telemetry prototype engineered to streamline localized delivery handoffs. Designed specifically for landmark-first address logging and low-latency state tracking, the system ensures seamless coordination between dispatchers and riders through automated short-polling and event auditing.
+REFLEX is a lightweight, offline-resilient delivery control system designed for small Kenyan retailers who currently coordinate deliveries through fragmented channels such as WhatsApp, phone calls and informal records. It creates a structured delivery workflow connecting **retailers, dispatchers, riders and customers**, providing visibility, accountability, customer safety and resilience from order creation through delivery completion or recovery. The system transforms an informal delivery process into a controlled lifecycle:
+
+**Logged → Assigned → Picked Up → Arrived → Delivered**
+
+When a delivery cannot be completed:
+
+**Failed → Rescheduled / Reassigned / Follow-up**
+
+REFLEX is intentionally designed around the realities of small-scale retail operations, including limited infrastructure, variable connectivity, landmark-based addresses and the need for low-cost deployment.
 
 ### Key Business Objectives
 * **Rapid Handoff Verification:** Secure delivery state transitions via 4-digit PIN verification.
 * **Localized Address Handling:** Landmark-first data capture optimized for unnumbered or informal routing contexts.
 * **Real-time State Telemetry:** Automated short-polling loops (5-second intervals) to maintain synchronized state between dispatcher and rider interfaces without heavy infrastructure overhead.
+* **Customer Safety & Trust:** Provide customers with relevant delivery information, including the assigned driver's name and vehicle or transport details, together with PIN-based handoff verification.
+* **Delivery Visibility:** Provide retailers and dispatchers with structured visibility of delivery status and rider assignment.
+* **Delivery Recovery:** Explicitly record failed deliveries and support operational recovery through rescheduling and rider reassignment.
+* **Operational Resilience:** Support continued operation during temporary connectivity interruptions through local action queuing and synchronization.
+
+* ## The Problem
+
+Small retailers often coordinate deliveries through WhatsApp, phone calls and informal records.
+
+While these tools are accessible, they can create operational gaps:
+
+- Orders can be missed or incorrectly communicated.
+- Retailers may have limited visibility of delivery progress.
+- Dispatchers may struggle to coordinate multiple riders and orders.
+- Customers may not know who is arriving at their door.
+- Rider accountability can be unclear.
+- Failed deliveries may not be properly recorded.
+- Changes to delivery times require additional communication.
+- Poor connectivity can interrupt the delivery workflow.
+- Businesses have limited structured data for reviewing delivery performance.
+
+---
   
 # REFLEX | Logistics & Delivery Control System
 
@@ -50,3 +80,5 @@ Reflex is a real-time readiness and dispatch telemetry prototype engineered to s
 * **4-Digit PIN Verification:** Secure handoff code required from rider to complete delivery state change.
 * **Real-time Short-Polling:** Automated status polling every 5 seconds keeps dispatcher and rider views updated dynamically.
 * **Immutable Event Log:** Every status transition generates an audit trail in the `Events` tab.
+* **Scheduling:** Allows deliveries to be planned around customer and operational availability.
+* **Rescheduling:** Allows delivery timing to be changed without losing the original delivery record.
