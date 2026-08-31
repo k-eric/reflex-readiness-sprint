@@ -283,7 +283,11 @@
       const remainingQueue = [];
       for (const item of queue) {
         try {
-          const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(item) });
+          const res = await fetch(API_URL, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(item) 
+          });
           const data = await res.json();
           if (!data.success) remainingQueue.push(item);
         } catch (err) { remainingQueue.push(item); }
@@ -356,7 +360,11 @@
       }
 
       try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const res = await fetch(API_URL, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload) 
+        });
         const data = await res.json();
         if (data.success) {
           alert('Order Created: ' + data.orderId + '\nVerification PIN: ' + data.pin);
@@ -385,7 +393,7 @@
 
     async function fetchOrders() {
       try {
-        const response = await fetch(API_URL);
+        const response = await fetch(API_URL, { method: 'GET', redirect: 'follow' });
         const data = await response.json();
         if (data.success) {
           liveOrders = data.orders || [];
@@ -622,7 +630,11 @@
       };
 
       try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const res = await fetch(API_URL, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload) 
+        });
         const data = await res.json();
         if (data.success) {
           alert(`Order ${orderId} has been ESCALATED to Dispatch Support.`);
@@ -634,7 +646,11 @@
     async function updateStatus(orderId, newStatus, riderId = null) {
       const payload = { action: 'UPDATE_STATUS', orderId: orderId, newStatus: newStatus, riderId: riderId, actorRole: currentRole };
       try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const res = await fetch(API_URL, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload) 
+        });
         const data = await res.json();
         if (data.success) {
           fetchOrders();
@@ -649,6 +665,7 @@
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'UPDATE_STATUS', orderId: orderId, newStatus: 'DELIVERED', pin: pin })
         });
         const data = await res.json();
@@ -672,6 +689,7 @@
       try {
         const response = await fetch(API_URL, {
           method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             action: 'UPDATE_STATUS',
             orderId: orderId,
