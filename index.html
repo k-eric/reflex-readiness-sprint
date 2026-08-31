@@ -25,7 +25,6 @@
     <section id="view-retailer" class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
       <div class="flex justify-between items-center border-b pb-2">
         <h2 class="text-lg font-bold">Log New Delivery</h2>
-        <!-- [TAG: RET-03] Retailer Verification Flag -->
         <span class="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
           ✓ Verified Retailer
         </span>
@@ -37,7 +36,6 @@
           <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Shop / Business Name</label>
           <input type="text" id="shopName" placeholder="e.g. Nairobi Electronics Hub" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
         </div>
-        <!-- [TAG: RET-01] Retailer Type Dropdown -->
         <div>
           <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Retailer Category</label>
           <select id="shopType" class="w-full border p-2 rounded text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
@@ -51,7 +49,7 @@
         </div>
       </div>
 
-      <!-- [TAG: RET-02] Shop / Dispatch Pickup Location -->
+      <!-- Shop / Dispatch Pickup Location -->
       <div>
         <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Pickup Location / Shop Address</label>
         <input type="text" id="pickupLocation" placeholder="e.g. Luthuli Avenue, Electronic House Floor 2, Shop B4" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
@@ -67,7 +65,6 @@
           <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Specific Model / SKU</label>
           <input type="text" id="itemModel" placeholder="e.g. 55'' AU7000 Crystal UHD" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
         </div>
-        <!-- [TAG: ORD-01] Quantity Field -->
         <div class="md:col-span-2">
           <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Quantity</label>
           <input type="number" id="itemQty" value="1" min="1" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold text-center">
@@ -170,13 +167,13 @@
         </div>
       </div>
 
-      <!-- Failed Deliveries Section -->
+      <!-- Failed & Escalated Deliveries Section -->
       <div class="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
         <h3 class="text-sm font-bold text-red-800 flex items-center gap-2">
-          <span> Failed Deliveries & Reassignments</span>
+          <span>🚨 Failed & Escalated Deliveries</span>
         </h3>
         <div id="failed-orders-list" class="space-y-3">
-          <p class="text-xs text-red-500 italic">No failed deliveries reported.</p>
+          <p class="text-xs text-red-500 italic">No failed or escalated deliveries reported.</p>
         </div>
       </div>
 
@@ -204,7 +201,6 @@
     let fleetRiders = [];
     let currentRole = 'retailer';
 
-    // Preset lookup mapping (Add as many common hubs as needed)
     const KNOWN_LOCATIONS = {
       'nairobi cbd': 3,
       'cbd': 3,
@@ -222,7 +218,6 @@
       const inputVal = document.getElementById('area').value.toLowerCase().trim();
       const distField = document.getElementById('distanceKm');
       
-      // Auto match preset names
       if (KNOWN_LOCATIONS[inputVal]) {
         distField.value = KNOWN_LOCATIONS[inputVal];
       }
@@ -299,12 +294,12 @@
 
     async function submitOrder() {
       const shopName = document.getElementById('shopName').value.trim() || 'Unspecified Shop';
-      const shopType = document.getElementById('shopType').value; // [TAG: RET-01]
-      const pickupLocation = document.getElementById('pickupLocation').value.trim() || 'Nairobi CBD Main Hub'; // [TAG: RET-02]
+      const shopType = document.getElementById('shopType').value;
+      const pickupLocation = document.getElementById('pickupLocation').value.trim() || 'Nairobi CBD Main Hub';
       
       const item = document.getElementById('item').value.trim();
       const itemModel = document.getElementById('itemModel').value.trim() || 'N/A';
-      const itemQty = parseInt(document.getElementById('itemQty').value || '1'); // [TAG: ORD-01]
+      const itemQty = parseInt(document.getElementById('itemQty').value || '1');
       
       const custName = document.getElementById('custName').value.trim();
       const phone = document.getElementById('custPhone').value.trim();
@@ -334,12 +329,12 @@
       const payload = {
         action: 'CREATE_ORDER',
         shopName: shopName,
-        shopType: shopType, // [TAG: RET-01]
-        pickupLocation: pickupLocation, // [TAG: RET-02]
-        isVerifiedRetailer: true, // [TAG: RET-03]
+        shopType: shopType,
+        pickupLocation: pickupLocation,
+        isVerifiedRetailer: true,
         item: item,
         itemModel: itemModel,
-        itemQty: itemQty, // [TAG: ORD-01]
+        itemQty: itemQty,
         customerName: custName,
         phone: phone,
         area: area,
@@ -404,7 +399,6 @@
 
     setInterval(fetchOrders, 5000);
 
-    // [TAG: RDR-01] Render Fleet Roster with Operating Zone
     function renderFleetRoster() {
       const container = document.getElementById('fleet-roster');
       if (fleetRiders.length === 0) {
@@ -423,23 +417,26 @@
       `).join('');
     }
 
-    // [TAG: TRK-02] Dispatcher View with Arrival Badges & Cargo/Distance Checks
     function renderDispatcherUI() {
       const activeContainer = document.getElementById('dispatcher-orders-list');
       const failedContainer = document.getElementById('failed-orders-list');
       
-      const activeOrders = liveOrders.filter(o => o.status !== 'FAILED');
-      const failedOrders = liveOrders.filter(o => o.status === 'FAILED');
+      const activeOrders = liveOrders.filter(o => o.status !== 'FAILED' && o.status !== 'ESCALATED');
+      const failedOrders = liveOrders.filter(o => o.status === 'FAILED' || o.status === 'ESCALATED');
 
       if (failedOrders.length === 0) {
-        failedContainer.innerHTML = '<p class="text-xs text-red-500 italic">No failed deliveries reported.</p>';
+        failedContainer.innerHTML = '<p class="text-xs text-red-500 italic">No failed or escalated deliveries reported.</p>';
       } else {
         failedContainer.innerHTML = failedOrders.map(o => `
           <div class="border border-red-300 p-3 rounded bg-white flex justify-between items-center">
             <div>
-              <p class="font-bold text-red-900">${o.orderId} - ${o.item} (x${o.itemQty || 1}) <span class="text-xs text-gray-500">(${o.shopName})</span></p>
-              <p class="text-xs text-red-700 font-medium mt-0.5"> Reason: ${o.failureReason || 'Not specified'}</p>
-              <p class="text-xs text-gray-600">Previous Rider: ${o.riderId} | Customer: ${o.customerName} (${o.phone})</p>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded ${o.status === 'ESCALATED' ? 'bg-red-600 text-white animate-pulse' : 'bg-red-200 text-red-900'}">${o.status}</span>
+                <span class="text-xs text-gray-500">(${o.shopName})</span>
+              </div>
+              <p class="font-bold text-red-900">${o.orderId} - ${o.item} (x${o.itemQty || 1})</p>
+              <p class="text-xs text-red-700 font-medium mt-0.5"> Reason / Details: ${o.failureReason || 'Not specified'}</p>
+              <p class="text-xs text-gray-600">Assigned Rider: ${o.riderId || 'N/A'} | Customer: ${o.customerName} (${o.phone})</p>
             </div>
             <div class="flex items-center gap-2">
               <select id="reassign-select-${o.orderId}" class="text-xs border p-1 rounded bg-white">
@@ -458,7 +455,6 @@
       }
       
       activeContainer.innerHTML = activeOrders.map(o => {
-        // [TAG: RDR-02] Check bulky cargo suitability
         const isBulky = o.item.toLowerCase().includes('tv') || o.item.toLowerCase().includes('fridge') || o.itemModel.toLowerCase().includes('55');
 
         return `
@@ -467,7 +463,6 @@
             <div class="flex items-center gap-2 mb-1">
               <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">${o.shopName || 'Unspecified'} (${o.shopType || 'General'})</span>
               
-              <!-- [TAG: TRK-02] Arrival Alert Badge -->
               ${o.status === 'ARRIVED' ? `
                 <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-indigo-600 text-white animate-pulse"> RIDER ARRIVED</span>
               ` : `
@@ -492,7 +487,6 @@
               <div class="flex items-center gap-2">
                 <select id="assign-select-${o.orderId}" class="text-xs border p-1.5 rounded bg-white">
                   ${fleetRiders.map(r => {
-                    // [TAG: RDR-02] Disable motorbikes for bulky items
                     const isBicycleOrBike = (r.vehicle || '').toLowerCase().includes('bike') || (r.vehicle || '').toLowerCase().includes('motorbike');
                     const cargoUnsuitable = isBulky && isBicycleOrBike;
                     const rangeExceeded = o.estimatedDistance > r.maxRangeKm;
@@ -516,7 +510,6 @@
       `}).join('');
     }
 
-    // [TAG: TRK-01] Rider UI with "I've Arrived" status step
     function renderRiderUI() {
       const container = document.getElementById('rider-orders-list');
       const riderJobs = liveOrders.filter(o => o.status === 'ASSIGNED' || o.status === 'PICKED UP' || o.status === 'ARRIVED');
@@ -536,37 +529,59 @@
           </div>
           
           <p class="text-xs text-gray-600">Pickup: <strong>${o.pickupLocation || 'Nairobi CBD'}</strong></p>
-          <p class="text-sm text-gray-600">Deliver to: <strong>${o.customerName}</strong> (${o.phone}) |  ${o.landmark}, ${o.area} (${o.estimatedDistance || 0} km)</p>
+          <p class="text-sm text-gray-600">Deliver to: <strong>${o.customerName}</strong> (${o.phone}) | ${o.landmark}, ${o.area} (${o.estimatedDistance || 0} km)</p>
           
           ${o.deliveryType === 'Scheduled' ? `<p class="text-xs text-blue-700 font-medium"> Window: ${o.deliveryDate} (${o.timeSlot})</p>` : ''}
           
-          <!-- [TAG: TRK-01] Status Actions -->
+          <!-- Status Actions -->
           <div class="flex flex-wrap gap-2 pt-1 border-t">
             ${o.status === 'ASSIGNED' ? `
               <button onclick="updateStatus('${o.orderId}', 'PICKED UP')" class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-amber-700">Mark Picked Up</button>
             ` : o.status === 'PICKED UP' ? `
               <button onclick="updateStatus('${o.orderId}', 'ARRIVED')" class="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-indigo-700"> I've Arrived</button>
             ` : `
-              <input type="text" id="pin-${o.orderId}" placeholder="Enter 4-Digit PIN" class="border p-1 text-xs rounded w-32 focus:ring-1 focus:ring-blue-500 outline-none">
-              <button onclick="verifyAndDeliver('${o.orderId}')" class="bg-green-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-green-700">Verify PIN & Complete</button>
+              <div class="w-full space-y-2">
+                <div class="flex gap-2">
+                  <input type="text" id="pin-${o.orderId}" placeholder="Enter 4-Digit PIN" class="border p-1 text-xs rounded w-32 focus:ring-1 focus:ring-blue-500 outline-none">
+                  <button onclick="verifyAndDeliver('${o.orderId}')" class="bg-green-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-green-700">Verify PIN & Complete</button>
+                </div>
+                
+                <!-- Lost PIN Override Trigger -->
+                <button type="button" onclick="toggleManualOverride('${o.orderId}')" class="text-xs text-blue-600 underline block">
+                  Lost PIN? Request Manual Override
+                </button>
+
+                <!-- Manual Override Input Container -->
+                <div id="manual-override-container-${o.orderId}" class="mt-2 p-2.5 bg-yellow-50 border border-yellow-200 rounded text-xs hidden">
+                  <p class="font-bold text-yellow-800 mb-1">⚠️ Customer Lost PIN?</p>
+                  <p class="text-gray-600 mb-2">Enter last 4 digits of customer's phone number:</p>
+                  <div class="flex gap-2">
+                    <input type="text" id="phoneTail-${o.orderId}" placeholder="Last 4 Digits" maxlength="4" class="p-1.5 border rounded w-28 text-center text-xs font-mono bg-white">
+                    <button onclick="submitManualDelivery('${o.orderId}')" class="bg-yellow-600 text-white px-3 py-1 rounded font-bold hover:bg-yellow-700">Verify Override</button>
+                  </div>
+                </div>
+              </div>
             `}
             
-            <button onclick="toggleFailureBox('${o.orderId}')" class="bg-red-100 text-red-700 border border-red-300 text-xs px-3 py-1.5 rounded font-medium hover:bg-red-200">
-              Report Failure
+            <button onclick="toggleFailureBox('${o.orderId}')" class="bg-red-100 text-red-700 border border-red-300 text-xs px-3 py-1.5 rounded font-medium hover:bg-red-200 mt-2">
+              🚨 Report Issue / Item Damaged
             </button>
           </div>
 
+          <!-- Issue Escalation Box -->
           <div id="fail-box-${o.orderId}" class="hidden bg-red-50 p-2.5 rounded border border-red-200 space-y-2 mt-2">
-            <label class="block text-xs font-semibold text-red-800">Select Reason for Delivery Failure:</label>
+            <label class="block text-xs font-semibold text-red-800">Select Escalation / Damage Issue:</label>
             <select id="reason-${o.orderId}" class="w-full text-xs border p-1.5 rounded bg-white">
+              <option value="ITEM_DAMAGED">Broken / Damaged Item on Delivery</option>
+              <option value="WRONG_ITEM">Incorrect Item Provided by Retailer</option>
               <option value="Customer Unavailable">Customer Unavailable</option>
               <option value="Incorrect Address">Incorrect Address</option>
-              <option value="Customer Refused">Customer Refused</option>
-              <option value="Customer Unreachable">Customer Unreachable</option>
-              <option value="Rider/Vehicle Problem">Rider/Vehicle Problem</option>
+              <option value="Customer Refused">Customer Refused Package</option>
+              <option value="Rider/Vehicle Problem">Rider / Vehicle Problem</option>
             </select>
+            <input type="text" id="details-${o.orderId}" placeholder="Optional details (e.g., box torn, screen cracked)..." class="w-full border p-1.5 rounded text-xs bg-white">
             <button onclick="submitDeliveryFailure('${o.orderId}')" class="w-full bg-red-600 text-white text-xs py-1.5 rounded font-bold hover:bg-red-700">
-              Submit Failure & Notify Dispatcher
+              Submit Escalation to Dispatch
             </button>
           </div>
         </div>
@@ -575,6 +590,11 @@
 
     function toggleFailureBox(orderId) {
       const box = document.getElementById(`fail-box-${orderId}`);
+      if (box) box.classList.toggle('hidden');
+    }
+
+    function toggleManualOverride(orderId) {
+      const box = document.getElementById(`manual-override-container-${orderId}`);
       if (box) box.classList.toggle('hidden');
     }
 
@@ -590,15 +610,25 @@
 
     async function submitDeliveryFailure(orderId) {
       const reason = document.getElementById(`reason-${orderId}`).value;
-      const payload = { action: 'UPDATE_STATUS', orderId: orderId, newStatus: 'FAILED', failureReason: reason, actorRole: 'rider' };
+      const details = document.getElementById(`details-${orderId}`).value.trim();
+      const fullReason = details ? `[${reason}] ${details}` : reason;
+
+      const payload = { 
+        action: 'UPDATE_STATUS', 
+        orderId: orderId, 
+        newStatus: 'ESCALATED', 
+        failureReason: fullReason, 
+        actorRole: 'rider' 
+      };
+
       try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
         const data = await res.json();
         if (data.success) {
-          alert(`Order ${orderId} marked as FAILED (${reason}). Dispatcher notified.`);
+          alert(`Order ${orderId} has been ESCALATED to Dispatch Support.`);
           fetchOrders();
         }
-      } catch (err) { console.error('Error logging failure:', err); }
+      } catch (err) { console.error('Error logging escalation:', err); }
     }
 
     async function updateStatus(orderId, newStatus, riderId = null) {
@@ -629,6 +659,38 @@
           alert('Invalid PIN! Handoff verification failed.');
         }
       } catch (err) { console.error('Verification failed:', err); }
+    }
+
+    async function submitManualDelivery(orderId) {
+      const phoneTail = document.getElementById(`phoneTail-${orderId}`).value.trim();
+
+      if (phoneTail.length !== 4) {
+        alert("Please enter the last 4 digits of the customer's phone number.");
+        return;
+      }
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'UPDATE_STATUS',
+            orderId: orderId,
+            newStatus: 'DELIVERED',
+            isManualOverride: true,
+            overrideCode: phoneTail,
+            overrideReason: 'Customer Lost PIN (Phone Tail Verified)',
+            actorRole: 'RIDER'
+          })
+        });
+
+        const res = await response.json();
+        if (res.success) {
+          alert('Order successfully verified & completed via Manual Override!');
+          fetchOrders();
+        } else {
+          alert('Manual Override Error: ' + res.message);
+        }
+      } catch (err) { console.error('Manual verification failed:', err); }
     }
 
     window.addEventListener('DOMContentLoaded', () => { processQueue(); fetchOrders(); });
