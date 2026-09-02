@@ -169,7 +169,7 @@
       <!-- Failed & Escalated Deliveries Section -->
       <div class="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
         <h3 class="text-sm font-bold text-red-800 flex items-center gap-2">
-          <span>🚨 Failed & Escalated Deliveries</span>
+          <span> Failed & Escalated Deliveries</span>
         </h3>
         <div id="failed-orders-list" class="space-y-3">
           <p class="text-xs text-red-500 italic">No failed or escalated deliveries reported.</p>
@@ -356,6 +356,10 @@ function normalizeRider(r) {
       const area = document.getElementById('area').value.trim() || 'Unspecified Area';
       const distance = parseInt(document.getElementById('distanceKm').value || '0');
       const isOutOfZone = distance > 20;
+if (isOutOfZone) {
+  alert("Submission Blocked: Order is out of operational coverage zone (> 20 km). Delivery cannot be processed.");
+  return;
+}
       const landmark = document.getElementById('landmark').value.trim();
       const deliveryType = document.getElementById('deliveryType').value;
       const isUrgent = document.getElementById('isUrgent').checked;
@@ -586,7 +590,7 @@ function normalizeRider(r) {
                 </button>
 
                 <div id="manual-override-container-${safeId}" class="mt-2 p-2.5 bg-yellow-50 border border-yellow-200 rounded text-xs hidden">
-                  <p class="font-bold text-yellow-800 mb-1">⚠️ Customer Lost PIN?</p>
+                  <p class="font-bold text-yellow-800 mb-1"> Customer Lost PIN?</p>
                   <p class="text-gray-600 mb-2">Enter last 4 digits of customer's phone number:</p>
                   <div class="flex gap-2">
                     <input type="text" id="phoneTail-${safeId}" placeholder="Last 4 Digits" maxlength="4" class="p-1.5 border rounded w-28 text-center text-xs font-mono bg-white">
@@ -597,7 +601,7 @@ function normalizeRider(r) {
             `}
             
             <button onclick="toggleFailureBox('${safeId}')" class="bg-red-100 text-red-700 border border-red-300 text-xs px-3 py-1.5 rounded font-medium hover:bg-red-200 mt-2">
-              🚨 Report Issue / Item Damaged
+               Report Issue / Item Damaged
             </button>
           </div>
 
@@ -643,18 +647,29 @@ function normalizeRider(r) {
       updateStatus(orderId, 'ASSIGNED', selectEl.value);
     }
 
-    async function executeReassignment(orderId) {
-      if (!orderId) {
-        alert("Error: Order ID is missing or invalid.");
-        return;
-      }
-      const selectEl = document.getElementById(`reassign-select-${orderId}`);
-      if (!selectEl || !selectEl.value) {
-        alert("Please select a rider to reassign.");
-        return;
-      }
-      updateStatus(orderId, 'ASSIGNED', selectEl.value);
-    }
+   async function executeAssignment(orderId) {
+  if (!orderId) {
+    alert("Error: Order ID is missing or invalid.");
+    return;
+  }
+  const selectEl = document.getElementById(`assign-select-${orderId}`);
+  if (!selectEl || !selectEl.value) {
+    alert("Please select a rider to assign.");
+    return;
+  }
+
+  // ADD THIS BLOCKING GUARD: Check rider range vs order distance
+  const selectedRiderId = selectEl.value;
+  const order = liveOrders.find(o => o.orderId === orderId);
+  const rider = fleetRiders.find(r => r.riderId === selectedRiderId);
+
+  if (order && rider && order.estimatedDistance > rider.maxRangeKm) {
+    alert(`Assignment Blocked: Delivery distance (${order.estimatedDistance} km) exceeds ${rider.name}'s max range (${rider.maxRangeKm} km for ${rider.vehicle}).`);
+    return; // Stops assignment completely
+  }
+
+  updateStatus(orderId, 'ASSIGNED', selectedRiderId);
+}
 
     async function submitDeliveryFailure(orderId) {
       const reason = document.getElementById(`reason-${orderId}`).value;
