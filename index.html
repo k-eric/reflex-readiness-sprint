@@ -51,8 +51,8 @@
 
       <!-- Shop Pickup Location -->
       <div>
-        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Pickup Location / Shop Address</label>
-        <input type="text" id="pickupLocation" placeholder="e.g. Luthuli Avenue, Electronic House Floor 2, Shop B4" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Pickup Location / Shop Address (Nairobi / Kenya Only)</label>
+        <input type="text" id="pickupLocation" placeholder="e.g. Luthuli Avenue, Electronic House, Nairobi" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
       </div>
 
       <!-- Item Specifications -->
@@ -86,7 +86,7 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="md:col-span-2">
           <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Delivery Location / Area Name</label>
-          <input type="text" id="area" list="location-suggestions" oninput="autoDetectDistance()" placeholder="Type custom location or select suggested area..." class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+          <input type="text" id="area" list="location-suggestions" oninput="autoDetectDistance()" placeholder="Type location in Kenya or select area..." class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm">
           <datalist id="location-suggestions">
             <option value="Nairobi CBD">
             <option value="Westlands">
@@ -206,68 +206,86 @@
       'thika': 45, 'karatina': 130
     };
 
-   function normalizeOrder(o) {
-  if (!o) return {};
+    const FORBIDDEN_COUNTRIES = ['america', 'usa', 'united states', 'uk', 'london', 'china', 'india', 'canada', 'germany'];
 
-  // Find orderId across all possible object keys
-  let extractedId = o.orderId || o.orderid || o['Order ID'] || o['order ID'] || o.id || '';
-  if (!extractedId) {
-    for (let key in o) {
-      if (key.toLowerCase().includes('orderid') || key.toLowerCase() === 'id') {
-        extractedId = o[key];
-        break;
+    function normalizeOrder(o) {
+      if (!o) return {};
+
+      let extractedId = o.orderId || o.orderid || o['Order ID'] || o['order ID'] || o.id || '';
+      if (!extractedId) {
+        for (let key in o) {
+          if (key.toLowerCase().includes('orderid') || key.toLowerCase() === 'id') {
+            extractedId = o[key];
+            break;
+          }
+        }
+      }
+
+      const rawUrgent = o.isUrgent !== undefined ? o.isUrgent : o['Is Urgent'];
+      const isUrgentBool = rawUrgent === true || String(rawUrgent).toUpperCase() === 'YES' || String(rawUrgent).toLowerCase() === 'true';
+
+      const rawOutOfZone = o.isOutOfZone !== undefined ? o.isOutOfZone : o['Is Out of Zone'];
+      const isOutOfZoneBool = rawOutOfZone === true || String(rawOutOfZone).toUpperCase() === 'YES' || String(rawOutOfZone).toLowerCase() === 'true';
+
+      return {
+        ...o,
+        orderId: String(extractedId || '').trim(),
+        shopName: o.shopName || o.shopname || o['Shop Name'] || 'Unspecified Shop',
+        shopType: o.shopType || o.shoptype || o['Shop Type'] || 'General',
+        pickupLocation: o.pickupLocation || o.pickuplocation || o['Pickup Location'] || 'Nairobi CBD',
+        item: o.item || o['Item Description'] || o.Item || '',
+        itemModel: o.itemModel || o.itemmodel || o['Specific Model'] || o['Item Model'] || 'N/A',
+        itemQty: parseInt(o.itemQty || o.itemqty || o['Quantity'] || o['Item Qty'] || 1),
+        customerName: o.customerName || o.customername || o['Customer Name'] || 'N/A',
+        phone: o.customerPhone || o.phone || o.customerphone || o['Customer Phone'] || o['Phone'] || '',
+        area: o.area || o['Delivery Location'] || o['Area'] || 'Unspecified Area',
+        landmark: o.landmark || o['Landmark'] || '',
+        estimatedDistance: parseInt(o.estimatedDistanceKm || o.estimatedDistance || o.estimateddistancekm || o['Estimated Distance (km)'] || o['Est. Distance'] || 0),
+        status: String(o.status || o['Status'] || 'LOGGED').trim().toUpperCase(),
+        riderId: o.assignedRiderId || o.assignedriderid || o.riderId || o.riderid || o['Assigned Rider ID'] || o['Rider ID'] || '',
+        failureReason: o.failureReason || o.failurereason || o['Failure Reason'] || '',
+        deliveryType: o.deliveryType || o.deliverytype || o['Delivery Priority'] || 'Immediate',
+        deliveryDate: o.deliveryDate || o.deliverydate || o['Preferred Date'] || '',
+        timeSlot: o.timeSlot || o.timeslot || o['Preferred Time Window'] || '',
+        isUrgent: isUrgentBool,
+        isOutOfZone: isOutOfZoneBool
+      };
+    }
+
+    function normalizeRider(r) {
+      if (!r) return {};
+
+      let extractedRiderId = r.riderId || r.riderid || r['Rider ID'] || r['rider ID'] || r.id || '';
+      if (!extractedRiderId) {
+        for (let key in r) {
+          if (key.toLowerCase().includes('riderid') || key.toLowerCase() === 'id') {
+            extractedRiderId = r[key];
+            break;
+          }
+        }
+      }
+
+      return {
+        ...r,
+        riderId: String(extractedRiderId || '').trim(),
+        name: r.name || r['Rider Name'] || r['Name'] || 'Unassigned Rider',
+        vehicle: r.vehicle || r['Vehicle Type'] || 'Motorbike',
+        maxRangeKm: parseInt(r.maxRangeKm || r.maxrangekm || r['Max Range (km)'] || 15),
+        operatingZone: r.operatingZone || r.operatingzone || r['Operating Zone'] || 'Nairobi CBD / Central',
+        status: String(r.status || r['Status'] || 'ACTIVE').trim().toUpperCase()
+      };
+    }
+
+    function updateSyncBadge(statusText, isOnline = true) {
+      const badge = document.getElementById('sync-status');
+      if (!badge) return;
+      badge.innerText = statusText;
+      if (isOnline) {
+        badge.className = "bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold";
+      } else {
+        badge.className = "bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-semibold animate-pulse";
       }
     }
-  }
-
-  return {
-    ...o,
-    orderId: String(extractedId || '').trim(),
-    shopName: o.shopName || o.shopname || o['Shop Name'] || 'Unspecified Shop',
-    shopType: o.shopType || o.shoptype || o['Shop Type'] || 'General',
-    pickupLocation: o.pickupLocation || o.pickuplocation || o['Pickup Location'] || 'Nairobi CBD',
-    item: o.item || o['Item Description'] || o.Item || '',
-    itemModel: o.itemModel || o.itemmodel || o['Specific Model'] || o['Item Model'] || 'N/A',
-    itemQty: parseInt(o.itemQty || o.itemqty || o['Quantity'] || o['Item Qty'] || 1),
-    customerName: o.customerName || o.customername || o['Customer Name'] || 'N/A',
-    phone: o.customerPhone || o.phone || o.customerphone || o['Customer Phone'] || o['Phone'] || '',
-    area: o.area || o['Delivery Location'] || o['Area'] || 'Unspecified Area',
-    landmark: o.landmark || o['Landmark'] || '',
-    estimatedDistance: parseInt(o.estimatedDistanceKm || o.estimatedDistance || o.estimateddistancekm || o['Estimated Distance (km)'] || o['Est. Distance'] || 0),
-    status: String(o.status || o['Status'] || 'LOGGED').trim().toUpperCase(),
-    riderId: o.assignedRiderId || o.assignedriderid || o.riderId || o.riderid || o['Assigned Rider ID'] || o['Rider ID'] || '',
-    failureReason: o.failureReason || o.failurereason || o['Failure Reason'] || '',
-    deliveryType: o.deliveryType || o.deliverytype || o['Delivery Priority'] || 'Immediate',
-    deliveryDate: o.deliveryDate || o.deliverydate || o['Preferred Date'] || '',
-    timeSlot: o.timeSlot || o.timeslot || o['Preferred Time Window'] || '',
-    isUrgent: o.isUrgent === true || o.isUrgent === 'YES' || o.isUrgent === 'true',
-    isOutOfZone: o.isOutOfZone === true || o.isOutOfZone === 'YES' || o.isOutOfZone === 'true'
-  };
-}
-
-function normalizeRider(r) {
-  if (!r) return {};
-
-  let extractedRiderId = r.riderId || r.riderid || r['Rider ID'] || r['rider ID'] || r.id || '';
-  if (!extractedRiderId) {
-    for (let key in r) {
-      if (key.toLowerCase().includes('riderid') || key.toLowerCase() === 'id') {
-        extractedRiderId = r[key];
-        break;
-      }
-    }
-  }
-
-  return {
-    ...r,
-    riderId: String(extractedRiderId || '').trim(),
-    name: r.name || r['Rider Name'] || r['Name'] || 'Unassigned Rider',
-    vehicle: r.vehicle || r['Vehicle Type'] || 'Motorbike',
-    maxRangeKm: parseInt(r.maxRangeKm || r.maxrangekm || r['Max Range (km)'] || 15),
-    operatingZone: r.operatingZone || r.operatingzone || r['Operating Zone'] || 'Nairobi CBD / Central',
-    status: String(r.status || r['Status'] || 'ACTIVE').trim().toUpperCase()
-  };
-}
 
     function autoDetectDistance() {
       const inputVal = document.getElementById('area').value.toLowerCase().trim();
@@ -325,9 +343,17 @@ function normalizeRider(r) {
     function saveQueue(q) { localStorage.setItem('reflex_offline_queue', JSON.stringify(q)); }
 
     async function processQueue() {
-      if (!navigator.onLine) return;
+      if (!navigator.onLine) {
+        updateSyncBadge(`Offline (${getQueue().length} Queued)`, false);
+        return;
+      }
       const queue = getQueue();
-      if (queue.length === 0) return;
+      if (queue.length === 0) {
+        updateSyncBadge("Online & Synced", true);
+        return;
+      }
+
+      updateSyncBadge(`Syncing ${queue.length} Offline Items...`, false);
       const remainingQueue = [];
       for (const item of queue) {
         try {
@@ -341,13 +367,21 @@ function normalizeRider(r) {
         } catch (err) { remainingQueue.push(item); }
       }
       saveQueue(remainingQueue);
+      if (remainingQueue.length === 0) {
+        updateSyncBadge("Online & Synced", true);
+        fetchOrders();
+      } else {
+        updateSyncBadge(`Sync Retry (${remainingQueue.length} Pending)`, false);
+      }
     }
+
     window.addEventListener('online', processQueue);
+    window.addEventListener('offline', () => updateSyncBadge(`Offline (${getQueue().length} Queued)`, false));
 
     async function submitOrder() {
       const shopName = document.getElementById('shopName').value.trim() || 'Unspecified Shop';
       const shopType = document.getElementById('shopType').value;
-      const pickupLocation = document.getElementById('pickupLocation').value.trim() || 'Nairobi CBD Main Hub';
+      const pickupLocation = document.getElementById('pickupLocation').value.trim();
       const item = document.getElementById('item').value.trim();
       const itemModel = document.getElementById('itemModel').value.trim() || 'N/A';
       const itemQty = parseInt(document.getElementById('itemQty').value || '1');
@@ -356,24 +390,33 @@ function normalizeRider(r) {
       const area = document.getElementById('area').value.trim() || 'Unspecified Area';
       const distance = parseInt(document.getElementById('distanceKm').value || '0');
       const isOutOfZone = distance > 20;
-if (isOutOfZone) {
-  alert("Submission Blocked: Order is out of operational coverage zone (> 20 km). Delivery cannot be processed.");
-  return;
-}
       const landmark = document.getElementById('landmark').value.trim();
       const deliveryType = document.getElementById('deliveryType').value;
       const isUrgent = document.getElementById('isUrgent').checked;
       const deliveryDate = document.getElementById('deliveryDate').value;
       const timeSlot = document.getElementById('timeSlot').value;
 
-      if (!item || !custName || !phone) {
-        alert("Please fill out mandatory fields (Item Description, Customer Name, and Phone Number).");
+      if (!item || !custName || !phone || !pickupLocation) {
+        alert("Please fill out mandatory fields (Pickup Location, Item Description, Customer Name, and Phone Number).");
+        return;
+      }
+
+      // Bug 6 Fix: Strict Kenyan location validation
+      const fullLoc = (pickupLocation + ' ' + area).toLowerCase();
+      const isForeign = FORBIDDEN_COUNTRIES.some(country => fullLoc.includes(country));
+      if (isForeign) {
+        alert("Invalid Pickup Location: REFLEX operations are strictly localized to Kenya.");
         return;
       }
 
       const kePhoneRegex = /^(\+254|0)[71]\d{8}$/;
       if (!kePhoneRegex.test(phone)) {
         alert("Invalid Kenyan phone number format (+254... or 07.../01...).");
+        return;
+      }
+
+      if (isOutOfZone) {
+        alert("Submission Blocked: Delivery distance exceeds service radius (> 20 km).");
         return;
       }
 
@@ -385,7 +428,8 @@ if (isOutOfZone) {
 
       if (!navigator.onLine) {
         const queue = getQueue(); queue.push(payload); saveQueue(queue);
-        alert('Offline! Saved to queue.'); return;
+        updateSyncBadge(`Offline (${queue.length} Queued)`, false);
+        alert('Offline! Order saved to local queue.'); return;
       }
 
       try {
@@ -412,11 +456,16 @@ if (isOutOfZone) {
         } else alert('Error: ' + data.message);
       } catch (err) {
         const queue = getQueue(); queue.push(payload); saveQueue(queue);
+        updateSyncBadge(`Offline (${queue.length} Queued)`, false);
         alert('Network failed. Saved to offline queue.');
       }
     }
 
     async function fetchOrders() {
+      // Bug 2 Fix: Skip auto-rendering if user is currently interacting with input or select elements
+      const activeEl = document.activeElement;
+      const isUserInteracting = activeEl && (activeEl.tagName === 'SELECT' || activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+
       try {
         const response = await fetch(API_URL, { method: 'GET', redirect: 'follow' });
         const data = await response.json();
@@ -424,9 +473,11 @@ if (isOutOfZone) {
           liveOrders = (data.orders || []).map(normalizeOrder);
           fleetRiders = (data.riders || []).map(normalizeRider);
           
-          renderFleetRoster();
-          renderDispatcherUI();
-          renderRiderUI();
+          if (!isUserInteracting) {
+            renderFleetRoster();
+            renderDispatcherUI();
+            renderRiderUI();
+          }
         }
       } catch (err) { console.error('Poll failed:', err); }
     }
@@ -476,10 +527,10 @@ if (isOutOfZone) {
             </div>
             <div class="flex items-center gap-2">
               <select id="reassign-select-${safeId}" class="text-xs border p-1 rounded bg-white">
+                <option value="">-- Choose Rider --</option>
                 ${fleetRiders.map(r => `<option value="${r.riderId}">${r.name} (${r.vehicle} - ${r.maxRangeKm}km)</option>`).join('')}
               </select>
               <button onclick="executeReassignment('${safeId}')" class="bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700 font-medium">Reassign</button>
-              <button onclick="updateStatus('${safeId}', 'LOGGED')" class="bg-gray-600 text-white text-xs px-3 py-1 rounded hover:bg-gray-700 font-medium">Reset</button>
             </div>
           </div>
         `}).join('');
@@ -492,7 +543,9 @@ if (isOutOfZone) {
       
       activeContainer.innerHTML = activeOrders.map(o => {
         const safeId = o.orderId || o.id || '';
-        const isBulky = (o.item || '').toLowerCase().includes('tv') || (o.item || '').toLowerCase().includes('fridge') || (o.itemModel || '').toLowerCase().includes('55');
+        const itemText = (o.item || '').toLowerCase();
+        const modelText = (o.itemModel || '').toLowerCase();
+        const isBulky = itemText.includes('tv') || itemText.includes('fridge') || modelText.includes('55') || o.itemQty > 5;
 
         return `
         <div class="border p-3.5 rounded-lg flex justify-between items-center bg-gray-50 space-y-1">
@@ -523,16 +576,20 @@ if (isOutOfZone) {
             ${o.status === 'LOGGED' ? `
               <div class="flex items-center gap-2">
                 <select id="assign-select-${safeId}" class="text-xs border p-1.5 rounded bg-white">
+                  <option value="">-- Select Rider --</option>
                   ${fleetRiders.map(r => {
-                    const isBicycleOrBike = (r.vehicle || '').toLowerCase().includes('bike') || (r.vehicle || '').toLowerCase().includes('motorbike');
-                    const cargoUnsuitable = isBulky && isBicycleOrBike;
+                    const vehicleLower = (r.vehicle || '').toLowerCase();
+                    const isBicycle = vehicleLower.includes('bicycle') || vehicleLower.includes('bike');
+                    
+                    // Bug 1 Fix: Ensure bicycles are disabled for heavy cargo or large quantities
+                    const cargoUnsuitable = isBulky && isBicycle;
                     const rangeExceeded = o.estimatedDistance > r.maxRangeKm;
                     const isDisabled = rangeExceeded || cargoUnsuitable;
 
                     return `
                       <option value="${r.riderId}" ${isDisabled ? 'disabled class="text-red-400 bg-red-50"' : ''}>
                         ${r.name} (${r.vehicle} - ${r.maxRangeKm}km) 
-                        ${rangeExceeded ? ' Exceeds Range' : cargoUnsuitable ? ' Cargo Too Bulky' : ''}
+                        ${rangeExceeded ? ' Exceeds Range' : cargoUnsuitable ? ' Heavy/Bulky Load Unsuitable' : ''}
                       </option>
                     `;
                   }).join('')}
@@ -575,7 +632,7 @@ if (isOutOfZone) {
           <!-- Status Actions -->
           <div class="flex flex-wrap gap-2 pt-1 border-t">
             ${o.status === 'ASSIGNED' ? `
-              <button onclick="updateStatus('${safeId}', 'PICKED UP')" class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-amber-700">Mark Picked Up</button>
+              <button onclick="attemptPickup('${safeId}')" class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-amber-700">Mark Picked Up</button>
             ` : o.status === 'PICKED UP' ? `
               <button onclick="updateStatus('${safeId}', 'ARRIVED')" class="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-indigo-700"> I've Arrived</button>
             ` : `
@@ -615,13 +672,26 @@ if (isOutOfZone) {
               <option value="Customer Refused">Customer Refused Package</option>
               <option value="Rider/Vehicle Problem">Rider / Vehicle Problem</option>
             </select>
-            <input type="text" id="details-${safeId}" placeholder="Optional details (e.g., box torn, screen cracked)..." class="w-full border p-1.5 rounded text-xs bg-white">
+            <input type="text" id="details-${safeId}" placeholder="Optional details..." class="w-full border p-1.5 rounded text-xs bg-white">
             <button onclick="submitDeliveryFailure('${safeId}')" class="w-full bg-red-600 text-white text-xs py-1.5 rounded font-bold hover:bg-red-700">
               Submit Escalation to Dispatch
             </button>
           </div>
         </div>
       `}).join('');
+    }
+
+    // Bug 5 Fix: Prevent pickup of future-scheduled orders
+    function attemptPickup(orderId) {
+      const order = liveOrders.find(o => o.orderId === orderId);
+      if (order && order.deliveryType === 'Scheduled' && order.deliveryDate) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (order.deliveryDate > todayStr) {
+          alert(`Schedule Guard: This order is scheduled for ${order.deliveryDate}. Pickups cannot be marked prior to the scheduled date.`);
+          return;
+        }
+      }
+      updateStatus(orderId, 'PICKED UP');
     }
 
     function toggleFailureBox(orderId) {
@@ -635,41 +705,18 @@ if (isOutOfZone) {
     }
 
     async function executeAssignment(orderId) {
-      if (!orderId) {
-        alert("Error: Order ID is missing or invalid.");
-        return;
-      }
+      if (!orderId) { alert("Error: Order ID is missing or invalid."); return; }
       const selectEl = document.getElementById(`assign-select-${orderId}`);
-      if (!selectEl || !selectEl.value) {
-        alert("Please select a rider to assign.");
-        return;
-      }
+      if (!selectEl || !selectEl.value) { alert("Please select a rider to assign."); return; }
       updateStatus(orderId, 'ASSIGNED', selectEl.value);
     }
 
-   async function executeAssignment(orderId) {
-  if (!orderId) {
-    alert("Error: Order ID is missing or invalid.");
-    return;
-  }
-  const selectEl = document.getElementById(`assign-select-${orderId}`);
-  if (!selectEl || !selectEl.value) {
-    alert("Please select a rider to assign.");
-    return;
-  }
-
-  // ADD THIS BLOCKING GUARD: Check rider range vs order distance
-  const selectedRiderId = selectEl.value;
-  const order = liveOrders.find(o => o.orderId === orderId);
-  const rider = fleetRiders.find(r => r.riderId === selectedRiderId);
-
-  if (order && rider && order.estimatedDistance > rider.maxRangeKm) {
-    alert(`Assignment Blocked: Delivery distance (${order.estimatedDistance} km) exceeds ${rider.name}'s max range (${rider.maxRangeKm} km for ${rider.vehicle}).`);
-    return; // Stops assignment completely
-  }
-
-  updateStatus(orderId, 'ASSIGNED', selectedRiderId);
-}
+    async function executeReassignment(orderId) {
+      if (!orderId) { alert("Error: Order ID is missing or invalid."); return; }
+      const selectEl = document.getElementById(`reassign-select-${orderId}`);
+      if (!selectEl || !selectEl.value) { alert("Please select a rider to reassign."); return; }
+      updateStatus(orderId, 'ASSIGNED', selectEl.value);
+    }
 
     async function submitDeliveryFailure(orderId) {
       const reason = document.getElementById(`reason-${orderId}`).value;
@@ -699,10 +746,7 @@ if (isOutOfZone) {
     }
 
     async function updateStatus(orderId, newStatus, riderId = null) {
-      if (!orderId) {
-        alert("Error: Order ID is missing or invalid.");
-        return;
-      }
+      if (!orderId) { alert("Error: Order ID is missing or invalid."); return; }
       const payload = { action: 'UPDATE_STATUS', orderId: orderId, newStatus: newStatus, riderId: riderId, actorRole: currentRole };
       try {
         const res = await fetch(API_URL, { 
