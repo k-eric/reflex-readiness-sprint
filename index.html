@@ -11,7 +11,12 @@
     <!-- Header -->
     <header class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border">
       <h1 class="text-xl font-bold text-gray-800">REFLEX <span class="text-xs font-normal text-gray-500">| Delivery Control System</span></h1>
-      <span id="sync-status" class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold">Online & Synced</span>
+      <div class="flex items-center gap-2">
+        <span id="sync-status" class="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold">Online & Synced</span>
+        <button onclick="processQueue()" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold px-3 py-1 rounded-full transition" title="Force Sync Local Queue">
+          🔄 Sync Now
+        </button>
+      </div>
     </header>
 
     <!-- Role Switcher -->
@@ -187,7 +192,12 @@
 
     <!-- 3. Rider View -->
     <section id="view-rider" class="hidden bg-white p-6 rounded-xl shadow-sm border space-y-4">
-      <h2 class="text-lg font-bold border-b pb-2">Rider Handoff & Verification</h2>
+      <div class="flex justify-between items-center border-b pb-2">
+        <h2 class="text-lg font-bold">Rider Handoff & Verification</h2>
+        <span id="rider-sync-status" class="text-xs bg-green-100 text-green-800 font-semibold px-2.5 py-1 rounded-full">
+          Online & Synced
+        </span>
+      </div>
       <div id="rider-orders-list" class="space-y-3">
         <p class="text-gray-400 italic">Loading active assignments...</p>
       </div>
@@ -277,14 +287,16 @@
     }
 
     function updateSyncBadge(statusText, isOnline = true) {
-      const badge = document.getElementById('sync-status');
-      if (!badge) return;
-      badge.innerText = statusText;
-      if (isOnline) {
-        badge.className = "bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold";
-      } else {
-        badge.className = "bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-semibold animate-pulse";
-      }
+      const badges = [document.getElementById('sync-status'), document.getElementById('rider-sync-status')];
+      badges.forEach(badge => {
+        if (!badge) return;
+        badge.innerText = statusText;
+        if (isOnline) {
+          badge.className = "bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-semibold";
+        } else {
+          badge.className = "bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-semibold animate-pulse";
+        }
+      });
     }
 
     function autoDetectDistance() {
@@ -342,12 +354,29 @@
     function getQueue() { return JSON.parse(localStorage.getItem('reflex_offline_queue') || '[]'); }
     function saveQueue(q) { localStorage.setItem('reflex_offline_queue', JSON.stringify(q)); }
 
+    function cacheLiveData(orders, riders) {
+      localStorage.setItem('reflex_cached_orders', JSON.stringify(orders));
+      localStorage.setItem('reflex_cached_riders', JSON.stringify(riders));
+    }
+
+    function loadCachedData() {
+      const cachedOrders = localStorage.getItem('reflex_cached_orders');
+      const cachedRiders = localStorage.getItem('reflex_cached_riders');
+      if (cachedOrders) liveOrders = JSON.parse(cachedOrders).map(normalizeOrder);
+      if (cachedRiders) fleetRiders = JSON.parse(cachedRiders).map(normalizeRider);
+    }
+
     async function processQueue() {
+      const queue = getQueue();
       if (!navigator.onLine) {
-        updateSyncBadge(`Offline (${getQueue().length} Queued)`, false);
+        updateSyncBadge(`Offline (${queue.length} Queued)`, false);
+        loadCachedData();
+        renderFleetRoster();
+        renderDispatcherUI();
+        renderRiderUI();
         return;
       }
-      const queue = getQueue();
+
       if (queue.length === 0) {
         updateSyncBadge("Online & Synced", true);
         return;
@@ -355,6 +384,7 @@
 
       updateSyncBadge(`Syncing ${queue.length} Offline Items...`, false);
       const remainingQueue = [];
+      
       for (const item of queue) {
         try {
           const res = await fetch(API_URL, { 
@@ -366,9 +396,11 @@
           if (!data.success) remainingQueue.push(item);
         } catch (err) { remainingQueue.push(item); }
       }
+
       saveQueue(remainingQueue);
       if (remainingQueue.length === 0) {
         updateSyncBadge("Online & Synced", true);
+        alert("Offline queue successfully synced with cloud backend!");
         fetchOrders();
       } else {
         updateSyncBadge(`Sync Retry (${remainingQueue.length} Pending)`, false);
@@ -376,7 +408,13 @@
     }
 
     window.addEventListener('online', processQueue);
-    window.addEventListener('offline', () => updateSyncBadge(`Offline (${getQueue().length} Queued)`, false));
+    window.addEventListener('offline', () => {
+      updateSyncBadge(`Offline (${getQueue().length} Queued)`, false);
+      loadCachedData();
+      renderFleetRoster();
+      renderDispatcherUI();
+      renderRiderUI();
+    });
 
     async function submitOrder() {
       const shopName = document.getElementById('shopName').value.trim() || 'Unspecified Shop';
@@ -401,7 +439,6 @@
         return;
       }
 
-      // Bug 6 Fix: Strict Kenyan location validation
       const fullLoc = (pickupLocation + ' ' + area).toLowerCase();
       const isForeign = FORBIDDEN_COUNTRIES.some(country => fullLoc.includes(country));
       if (isForeign) {
@@ -453,6 +490,7 @@
           document.getElementById('landmark').value = '';
           document.getElementById('isUrgent').checked = false;
           document.getElementById('zone-alert-banner').classList.add('hidden');
+          fetchOrders();
         } else alert('Error: ' + data.message);
       } catch (err) {
         const queue = getQueue(); queue.push(payload); saveQueue(queue);
@@ -462,9 +500,18 @@
     }
 
     async function fetchOrders() {
-      // Bug 2 Fix: Skip auto-rendering if user is currently interacting with input or select elements
       const activeEl = document.activeElement;
       const isUserInteracting = activeEl && (activeEl.tagName === 'SELECT' || activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+
+      if (!navigator.onLine) {
+        loadCachedData();
+        if (!isUserInteracting) {
+          renderFleetRoster();
+          renderDispatcherUI();
+          renderRiderUI();
+        }
+        return;
+      }
 
       try {
         const response = await fetch(API_URL, { method: 'GET', redirect: 'follow' });
@@ -473,13 +520,23 @@
           liveOrders = (data.orders || []).map(normalizeOrder);
           fleetRiders = (data.riders || []).map(normalizeRider);
           
+          cacheLiveData(liveOrders, fleetRiders);
+
           if (!isUserInteracting) {
             renderFleetRoster();
             renderDispatcherUI();
             renderRiderUI();
           }
         }
-      } catch (err) { console.error('Poll failed:', err); }
+      } catch (err) { 
+        console.error('Poll failed, loading local cache:', err); 
+        loadCachedData();
+        if (!isUserInteracting) {
+          renderFleetRoster();
+          renderDispatcherUI();
+          renderRiderUI();
+        }
+      }
     }
 
     setInterval(fetchOrders, 5000);
@@ -581,7 +638,6 @@
                     const vehicleLower = (r.vehicle || '').toLowerCase();
                     const isBicycle = vehicleLower.includes('bicycle') || vehicleLower.includes('bike');
                     
-                    // Bug 1 Fix: Ensure bicycles are disabled for heavy cargo or large quantities
                     const cargoUnsuitable = isBulky && isBicycle;
                     const rangeExceeded = o.estimatedDistance > r.maxRangeKm;
                     const isDisabled = rangeExceeded || cargoUnsuitable;
@@ -681,7 +737,6 @@
       `}).join('');
     }
 
-    // Bug 5 Fix: Prevent pickup of future-scheduled orders
     function attemptPickup(orderId) {
       const order = liveOrders.find(o => o.orderId === orderId);
       if (order && order.deliveryType === 'Scheduled' && order.deliveryDate) {
