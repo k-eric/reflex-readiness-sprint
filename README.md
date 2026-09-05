@@ -71,6 +71,7 @@ While these tools are accessible, they can create operational gaps:
      git clone [https://github.com/kwendoEric/reflex-readiness-sprint.git](https://github.com/kwendoEric/reflex-readiness-sprint.git)
      ```
    * Open `index.html` directly in any web browser.
+   * Demo Link hosted via vercel: https://reflex-readiness-sprint-psi.vercel.app/
 
 ---
 
